@@ -81,10 +81,13 @@ public class NpcSpawner {
                     continue;
                 }
                 //要在刷怪区内
-                if (mobSpawnRegion.region.isVecInRegion(vec2d)) {
+                if (mobSpawnRegion.region.isVecInRegion(vec2d) && mobSpawnRegion.region.isVecInRegion(new Vec2d(player.posX, player.posZ))) {
                     //如果在黑名单内，则不刷怪
                     for (NpcRegion.BlackListRegion blackListRegion : mobSpawnRegion.blackList) {
                         if (blackListRegion.region.isVecInRegion(vec2d)) {
+                            continue label;
+                        }
+                        if (blackListRegion.region.isVecInRegion(new Vec2d(player.posX, player.posZ))) {
                             continue label;
                         }
                     }
@@ -139,7 +142,7 @@ public class NpcSpawner {
 
     /**
      * 权重随机数
-     * @param weight [15,568,4181,2]
+     * @param weight
      * @return 索引值
      */
     public static int random(List<Integer> weight) {
