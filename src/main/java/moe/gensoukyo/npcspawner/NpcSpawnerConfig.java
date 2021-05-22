@@ -1,18 +1,19 @@
 package moe.gensoukyo.npcspawner;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.common.collect.ImmutableList;
+import com.google.gson.*;
 import org.apache.commons.io.FileUtils;
+import org.apache.logging.log4j.Logger;
 
-import javax.annotation.Nullable;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
-import java.util.ArrayList;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * @author SQwatermark
+ * @author MrMks 2021/5/22 config_version 2
  */
 public class NpcSpawnerConfig {
 
@@ -24,6 +25,7 @@ public class NpcSpawnerConfig {
         return instance;
     }
 
+    private static final int VERSION = 2;
     //最小刷怪距离
     public int minSpawnDistance;
     //最大刷怪距离
@@ -31,9 +33,9 @@ public class NpcSpawnerConfig {
     //刷怪触发间隔,以tick计算
     public int interval;
     //刷怪区的集合
-    ArrayList<NpcRegion.MobSpawnRegion> mobSpawnRegions;
+    List<NpcRegion.Spawn> mobSpawnRegions;
     //安全区的集合
-    ArrayList<NpcRegion.BlackListRegion> blackListRegions;
+    List<NpcRegion.Black> blackListRegions;
 
     //配置文件
     public File spawnerConfig;
@@ -58,36 +60,25 @@ public class NpcSpawnerConfig {
                 blackListRegions.clear();
                 try {
                     String content = FileUtils.readFileToString(spawnerConfig, StandardCharsets.UTF_8);
-                    JsonParser parser = new JsonParser();
-                    JsonObject npcSpawnerConfigJson = (JsonObject) parser.parse(content);
-                    minSpawnDistance = npcSpawnerConfigJson.get("minSpawnDistance").getAsInt();
-                    maxSpawnDistance = npcSpawnerConfigJson.get("maxSpawnDistance").getAsInt();
-                    interval = npcSpawnerConfigJson.get("interval").getAsInt();
-                    JsonArray array = npcSpawnerConfigJson.get("mobSpawnRegions").getAsJsonArray();
-                    for (int i = 0; i < array.size(); i++) {
-                        JsonObject mobSpawnRegionJson = array.get(i).getAsJsonObject();
-                        NpcRegion.MobSpawnRegion mobSpawnRegion = parseMobSpawnRegion(mobSpawnRegionJson);
-                        if (mobSpawnRegion != null) {
-                            mobSpawnRegions.add(mobSpawnRegion);
-                        }
+                    JsonElement wholeConfigElement = new JsonParser().parse(content);
+                    Logger logger = ModMain.logger;
+                    if (wholeConfigElement.isJsonObject()) {
+                        JsonObject whoCfgObj = wholeConfigElement.getAsJsonObject();
+                        int version = getNumber(whoCfgObj, "cfg_version", 1).intValue();
+                        minSpawnDistance = getNumber(whoCfgObj, "minSpawnDistance", 6).intValue();
+                        maxSpawnDistance = getNumber(whoCfgObj, "maxSpawnDistance", 16).intValue();
+                        interval = getNumber(whoCfgObj, "interval", 20).intValue();
+                        Map<String, MobTemplate> mobs =
+                                whoCfgObj.has("mobs") ? parseNpcMobs(whoCfgObj.get("mobs"), logger) : Collections.emptyMap();
+                        mobSpawnRegions =
+                                whoCfgObj.has("groups") ? parseMobSpawnRegion(whoCfgObj.get("groups"), mobs, logger) : Collections.emptyList();
+                        blackListRegions =
+                                whoCfgObj.has("blacks") ? parseBlackListRegion(whoCfgObj.get("blacks"), logger) : Collections.emptyList();
+                    } else {
+                        logger.warn("NpcSpawner: 配置文件格式有误");
                     }
-                    try {
-                        JsonArray array2 = npcSpawnerConfigJson.get("blackListRegions").getAsJsonArray();
-                        for (int i = 0; i < array2.size(); i++) {
-                            JsonObject blackListRegionJson = array2.get(i).getAsJsonObject();
-                            NpcRegion.BlackListRegion blackListRegion = parseBlackListRegion(blackListRegionJson);
-                            if (blackListRegion != null) {
-                                blackListRegions.add(blackListRegion);
-                            }
-                        }
-                    } catch (Exception e) {
-                        ModMain.logger.info("MCGProject：未找到黑名单区域的配置");
-                        e.printStackTrace();
-                    }
-
-
                 } catch (Exception e) {
-                    ModMain.logger.info("MCGProject：读取刷怪配置文件出错！");
+                    ModMain.logger.info("NpcSpawner：读取刷怪配置文件出错！");
                     e.printStackTrace();
                 }
             }
@@ -97,80 +88,188 @@ public class NpcSpawnerConfig {
                 ModMain.logger.info("已生成mcgproject目录 ");
             }
         }
-        for (NpcRegion.MobSpawnRegion mobSpawnRegion : this.mobSpawnRegions) {
-            mobSpawnRegion.blackList.clear();
-            for (NpcRegion.BlackListRegion blackListRegion : this.blackListRegions) {
-                if (mobSpawnRegion.world.toLowerCase().equals(blackListRegion.world.toLowerCase())) {
-                    if (mobSpawnRegion.region.isCoincideWith(blackListRegion.region)) {
-                        mobSpawnRegion.blackList.add(blackListRegion);
+        this.mobSpawnRegions.forEach(r->r.mapCoincideRegion(this.blackListRegions));
+    }
+
+    private JsonPrimitive getJsonPrimitive(JsonObject obj, String key) {
+        if (obj.has(key)) {
+            JsonElement element = obj.get(key);
+            return element.isJsonPrimitive() ? element.getAsJsonPrimitive() : null;
+        }
+        return null;
+    }
+
+    private Number getNumber(JsonObject obj, String key, Number def) {
+        JsonPrimitive pri = getJsonPrimitive(obj, key);
+        return pri != null && pri.isNumber() ? pri.getAsNumber() : def;
+    }
+
+    private String getString(JsonObject obj, String key, String def) {
+        JsonPrimitive pri = getJsonPrimitive(obj, key);
+        return pri != null && pri.isString() ? pri.getAsString() : def;
+    }
+
+    private boolean getBoolean(JsonObject obj, String key, boolean def) {
+        JsonPrimitive pri = getJsonPrimitive(obj, key);
+        return pri != null && pri.isBoolean() ? pri.getAsBoolean() : def;
+    }
+
+    private Map<String, MobTemplate> parseNpcMobs(JsonElement ele, Logger logger) {
+        if (ele.isJsonObject()) {
+            JsonObject obj = ele.getAsJsonObject();
+            Map<String, MobTemplate> map = new HashMap<>();
+            for (Map.Entry<String, JsonElement> entry : obj.entrySet()) {
+                String key = entry.getKey();
+                JsonElement valE = entry.getValue();
+                if (valE.isJsonObject()) {
+                    JsonObject valO = valE.getAsJsonObject();
+                    int tab = getNumber(valO, "tab", 6).intValue();
+                    boolean inWater = getBoolean(valO, "inWater", false);
+                    int timeStart = getNumber(valO, "timeStart", 0).intValue();
+                    int timeEnd = getNumber(valO, "timeEnd", 24000).intValue();
+                    String name = getString(valO, "name", null);
+                    if (name != null) {
+                        map.put(key, new MobTemplate(tab, name, inWater, timeStart, timeEnd));
+                    } else {
+                        logger.warn("NpcSpawner: Can't get the name of the mob under key \"" + key + "\"");
+                    }
+                } else {
+                    logger.warn("NpcSpawner: Can't parse mob info with key \"" + key + "\"");
+                }
+            }
+            return map;
+        } else {
+            logger.warn("NpcSpawner: Can't parse the \"mobs\" array");
+        }
+        return Collections.emptyMap();
+    }
+
+    private Number getElementNumber(JsonElement e, Number def) {
+        return e.isJsonPrimitive() && e.getAsJsonPrimitive().isNumber() ? e.getAsNumber() : def;
+    }
+
+    private Region3d parseRegion0(JsonArray ary) {
+        if (ary.size() > 0 ){
+            if (ary.size() > 6) {
+                return new Region3d(
+                        getElementNumber(ary.get(0), 0).doubleValue(),
+                        getElementNumber(ary.get(1), 0).doubleValue(),
+                        getElementNumber(ary.get(2), 0).doubleValue(),
+                        getElementNumber(ary.get(3), 1).doubleValue(),
+                        getElementNumber(ary.get(4), 1).doubleValue(),
+                        getElementNumber(ary.get(5), 1).doubleValue()
+                );
+            } else if (ary.size() > 4) {
+                return new Region3d(
+                        getElementNumber(ary.get(0), 0).doubleValue(),
+                        0,
+                        getElementNumber(ary.get(1), 0).doubleValue(),
+                        getElementNumber(ary.get(2), 0).doubleValue(),
+                        255,
+                        getElementNumber(ary.get(3), 0).doubleValue()
+
+                );
+            }
+        }
+        return null;
+    }
+
+    private List<Region3d> parseRegion(JsonObject obj, String key) {
+        if (obj.has(key)) {
+            JsonElement e = obj.get(key);
+            if (e.isJsonArray()) {
+                List<Region3d> list = new LinkedList<>();
+                JsonArray ary = e.getAsJsonArray();
+                for (JsonElement ele : ary) {
+                    if (ele.isJsonArray()) {
+                        Region3d region3d = parseRegion0(ele.getAsJsonArray());
+                        if (region3d != null) list.add(region3d);
+                    }
+                }
+                return list;
+            } else {
+                return Collections.emptyList();
+            }
+        } else {
+            return Collections.emptyList();
+        }
+    }
+
+    private Map<String, Integer> parseMobWeight(JsonElement ele) {
+        if (ele.isJsonObject()) {
+            JsonObject obj = ele.getAsJsonObject();
+            HashMap<String, Integer> map = new HashMap<>();
+
+            for (Map.Entry<String, JsonElement> entry : obj.entrySet()) {
+                String key = entry.getKey();
+                JsonElement wE = entry.getValue();
+                int w;
+                if (wE.isJsonPrimitive() && wE.getAsJsonPrimitive().isNumber()) w = wE.getAsInt(); else w = 0;
+                map.put(key, w);
+            }
+
+            return map;
+
+        }
+        return Collections.emptyMap();
+    }
+
+    private List<NpcRegion.Spawn> parseMobSpawnRegion(JsonElement ele, Map<String, MobTemplate> map, Logger logger) {
+        if (ele.isJsonArray()) {
+            JsonArray groupAry = ele.getAsJsonArray();
+            Iterator<JsonElement> iterator = groupAry.iterator();
+            List<NpcRegion.Spawn> list = new LinkedList<>();
+            while (iterator.hasNext()) {
+                JsonElement groupEle = iterator.next();
+                if (groupEle.isJsonObject()) {
+                    JsonObject g_obj = groupEle.getAsJsonObject();
+                    String world = getString(g_obj, "world", null);
+                    if (world == null) {
+                        logger.warn("NpcSpawner: world can't be empty in \"groups\"");
+                    } else {
+                        String name = getString(g_obj, "name", "group" + System.currentTimeMillis());
+                        int density = getNumber(g_obj, "density", 20).intValue();
+                        List<Region3d> regions = parseRegion(g_obj, "regions");
+                        List<Region3d> excludes = parseRegion(g_obj, "excludes");
+                        List<Region3d> filteredRegions = regions.stream().filter(r-> excludes.stream().noneMatch(er->er.isVecInRegion(r.p1)&&er.isVecInRegion(r.p2))).collect(Collectors.toList());
+                        Map<String, Integer> mobs =
+                                g_obj.has("mobs") ? parseMobWeight(g_obj.get("mobs")) : Collections.emptyMap();
+                        List<MobEntry> npcMobs = mobs.entrySet().stream()
+                                .filter(entry->map.containsKey(entry.getKey()))
+                                .map(entry->new MobEntry(map.get(entry.getKey()), entry.getValue()))
+                                .collect(Collectors.toList());
+                        list.add(new NpcRegion.Spawn(name, world, filteredRegions, excludes, npcMobs, density));
                     }
                 }
             }
+            return list;
+        } else {
+            return Collections.emptyList();
         }
     }
 
-    public NpcRegion.MobSpawnRegion parseMobSpawnRegion(JsonObject mobSpawnRegionJson) {
-        try {
-            String name = mobSpawnRegionJson.get("name").getAsString();
-            String world = mobSpawnRegionJson.get("world").getAsString();
-            JsonArray pos1 = mobSpawnRegionJson.get("pos1").getAsJsonArray();
-            JsonArray pos2 = mobSpawnRegionJson.get("pos2").getAsJsonArray();
-            int density = mobSpawnRegionJson.get("density").getAsInt();
-            JsonArray mobs = mobSpawnRegionJson.get("mobs").getAsJsonArray();
-            return new NpcRegion.MobSpawnRegion(name, new Region2d(pos1.get(0).getAsDouble(),
-                    pos1.get(1).getAsDouble(), pos2.get(0).getAsDouble(), pos2.get(1).getAsDouble()), density, parseNpcMobs(mobs), world);
-        } catch (Exception e) {
-            ModMain.logger.error("MCGProject：刷怪配置解析错误！刷怪区信息不符合规范！已跳过该刷怪区！");
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public ArrayList<NpcMob> parseNpcMobs(JsonArray mobsJson) {
-        ArrayList<NpcMob> npcMobs = new ArrayList<>();
-        for (int i = 0; i < mobsJson.size(); i++) {
-            JsonObject mobJson = mobsJson.get(i).getAsJsonObject();
-            NpcMob mob = parseNpcMob(mobJson);
-            if (mob != null) {
-                npcMobs.add(mob);
+    private List<NpcRegion.Black> parseBlackListRegion(JsonElement ele, Logger logger) {
+        if (ele.isJsonArray()) {
+            JsonArray blackAry = ele.getAsJsonArray();
+            List<NpcRegion.Black> list = new LinkedList<>();
+            for (JsonElement blackEle : blackAry) {
+                if (blackEle.isJsonObject()) {
+                    JsonObject b_obj = blackEle.getAsJsonObject();
+                    String world = getString(b_obj, "world", null);
+                    if (world == null) {
+                        logger.warn("NpcSpawner: world can't be null or empty in \"blacks\"");
+                    } else {
+                        String name = getString(b_obj, "name", "black" + System.currentTimeMillis());
+                        List<Region3d> regions = parseRegion(b_obj, "regions");
+                        boolean delete = getBoolean(b_obj, "delete", false);
+                        list.add(new NpcRegion.Black(name, world, regions, delete));
+                    }
+                }
             }
+            return ImmutableList.copyOf(list);
+        } else {
+            logger.warn("");
         }
-        return npcMobs;
-    }
-
-    @Nullable
-    public NpcMob parseNpcMob(JsonObject mobJson) {
-        try {
-            int tab = mobJson.get("tab").getAsInt();
-            String mobName = mobJson.get("name").getAsString();
-            double weight = mobJson.get("weight").getAsDouble();
-            NpcMob mob = new NpcMob(tab, mobName, weight);
-            if (mobJson.has("waterMob")) {
-                mob.setWaterMob(mobJson.get("waterMob").getAsBoolean());
-            }
-            if (mobJson.has("timeStart") && mobJson.has("timeEnd")) {
-                mob.setTimeIndex(mobJson.get("timeStart").getAsInt(), mobJson.get("timeEnd").getAsInt());
-            }
-            return mob;
-        } catch (Exception e) {
-            ModMain.logger.error("MCGProject：刷怪配置解析错误！怪物信息不符合规范！已跳过该怪物！");
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public NpcRegion.BlackListRegion parseBlackListRegion(JsonObject blackListRegionJson) {
-        try {
-            String name = blackListRegionJson.get("name").getAsString();
-            JsonArray pos1 = blackListRegionJson.get("pos1").getAsJsonArray();
-            JsonArray pos2 = blackListRegionJson.get("pos2").getAsJsonArray();
-            String world = blackListRegionJson.get("world").getAsString();
-            return new NpcRegion.BlackListRegion(name, new Region2d(pos1.get(0).getAsDouble(),
-                    pos1.get(1).getAsDouble(), pos2.get(0).getAsDouble(), pos2.get(1).getAsDouble()), true, world);
-        } catch (Exception e) {
-            ModMain.logger.error("MCGProject：刷怪配置解析错误！安全区信息不符合规范！已跳过该安全区！");
-            e.printStackTrace();
-            return null;
-        }
+        return Collections.emptyList();
     }
 }

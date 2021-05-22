@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "mobs": {
+    "key1": {"tab": 6, "name": "nameOfSavedMob1"},
+    "key2": {"tab": 6, "name": "nameOfSavedMob2"}
+  },
+  "groups": [
+    {
+      "name": "groupA",
+      "world": "worldA",
+      "regions": [
+        [0,0,0,0,0,0,0]
+      ],
+      "exclude": [
+        [0,0,0,0,0,0,0]
+      ],
+      "mobs": {
+        "key1": 10,
+        "key2": 20
+      }
+    }
+  ],
+  "blacks": [
+    {
+      "name": "blackA",
+      "world": "worldA",
+      "regions": [
+        [0,0,0,0,0,0,0]
+      ]
+    }
+  ]
+}
