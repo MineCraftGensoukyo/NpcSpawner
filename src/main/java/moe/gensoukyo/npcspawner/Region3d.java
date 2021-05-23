@@ -20,8 +20,9 @@ public class Region3d {
 
     public boolean isVecInRegion(SimpleVec3d vec) {
         if (dif == null) dif = p2.subtract(p1);
-        SimpleVec3d n = dif.subtract(vec.subtract(p1));
-        return n.x > 0 && n.y > 0 && n.z > 0;
+        SimpleVec3d a = vec.subtract(p1);
+        SimpleVec3d n = dif.subtract(a);
+        return a.x > 0 && a.y > 0 && a.z > 0 && n.x > 0 && n.y > 0 && n.z > 0;
     }
 
     public boolean isRegionCoincide(Region3d o) {

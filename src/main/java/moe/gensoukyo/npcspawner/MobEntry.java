@@ -19,15 +19,18 @@ public class MobEntry {
      * @return the weight of this mob at this time.
      */
     public int getWeight() {
-        if (weight > 0) return weight--;
-        else return (weight = 0);
+        return weight;
     }
 
-    public int getWeightSilence() {
-        return weight;
+    public void reduceWeight() {
+        --weight;
     }
 
     public void resetWeight() {
         this.weight = weightSrc;
+    }
+
+    public boolean isWeightEmpty() {
+        return weight == 0 && weightSrc > weight;
     }
 }

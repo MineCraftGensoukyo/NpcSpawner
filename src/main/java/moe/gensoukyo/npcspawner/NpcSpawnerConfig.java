@@ -2,12 +2,12 @@ package moe.gensoukyo.npcspawner;
 
 import com.google.common.collect.ImmutableList;
 import com.google.gson.*;
+import moe.gensoukyo.npcspawner.looper.MainLooper;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -17,42 +17,61 @@ import java.util.stream.Collectors;
  */
 public class NpcSpawnerConfig {
 
+    public static File file;
+
     private static NpcSpawnerConfig instance;
+    private static final Object[] lock = new Object[0];
     public static NpcSpawnerConfig instance() {
-        if(instance == null) {
-            instance = new NpcSpawnerConfig();
+        synchronized (lock) {
+            if(instance == null) {
+                instance = new NpcSpawnerConfig(file);
+            }
+            return instance;
         }
-        return instance;
+    }
+
+    public static void reload(Runnable runnable) {
+        ModMain.subLooper.offer(()->{
+            NpcSpawnerConfig config = new NpcSpawnerConfig(file);
+            setInstance(config);
+            ModMain.mainLooper.offer(runnable);
+            ModMain.logger.info("Config of spawning has been reloaded");
+        });
+    }
+
+    private static void setInstance(NpcSpawnerConfig ins) {
+        synchronized (lock) {
+            instance = ins;
+        }
     }
 
     private static final int VERSION = 2;
     //最小刷怪距离
-    public int minSpawnDistance;
+    private int minSpawnDistance;
     //最大刷怪距离
-    public int maxSpawnDistance;
+    private int maxSpawnDistance;
     //刷怪触发间隔,以tick计算
-    public int interval;
+    private int interval;
     //刷怪区的集合
-    List<NpcRegion.Spawn> mobSpawnRegions;
+    private List<NpcRegion.Spawn> mobSpawnRegions;
     //安全区的集合
-    List<NpcRegion.Black> blackListRegions;
+    private List<NpcRegion.Black> blackListRegions;
 
     //配置文件
-    public File spawnerConfig;
+    private final File spawnerConfig;
 
-    private NpcSpawnerConfig() {
-        minSpawnDistance = 12;
-        maxSpawnDistance = 36;
-        interval = 300;
-        mobSpawnRegions = new ArrayList<>();
-        blackListRegions = new ArrayList<>();
+    private NpcSpawnerConfig(File file) {
+        this.spawnerConfig = file;
+        this.minSpawnDistance = 12;
+        this.maxSpawnDistance = 36;
+        this.interval = 300;
+        this.mobSpawnRegions = new ArrayList<>();
+        this.blackListRegions = new ArrayList<>();
         this.refresh();
     }
 
-    public void refresh() {
-        if (ModMain.modConfigDi.exists()) {
-            spawnerConfig = Paths.get(ModMain.modConfigDi.getAbsolutePath(), "npcspawner.json").toFile();
-
+    private void refresh() {
+        if (spawnerConfig != null) {
             if(!spawnerConfig.exists()) {
                 ModMain.logger.info("未找到NPC生成配置");
             } else if(!spawnerConfig.isDirectory()) {
@@ -64,10 +83,10 @@ public class NpcSpawnerConfig {
                     Logger logger = ModMain.logger;
                     if (wholeConfigElement.isJsonObject()) {
                         JsonObject whoCfgObj = wholeConfigElement.getAsJsonObject();
-                        int version = getNumber(whoCfgObj, "cfg_version", 1).intValue();
-                        minSpawnDistance = getNumber(whoCfgObj, "minSpawnDistance", 6).intValue();
-                        maxSpawnDistance = getNumber(whoCfgObj, "maxSpawnDistance", 16).intValue();
-                        interval = getNumber(whoCfgObj, "interval", 20).intValue();
+                        int version = getNumber(whoCfgObj, "version", 1).intValue();
+                        minSpawnDistance = getNumber(whoCfgObj, "minSpawnDistance", minSpawnDistance).intValue();
+                        maxSpawnDistance = getNumber(whoCfgObj, "maxSpawnDistance", maxSpawnDistance).intValue();
+                        interval = getNumber(whoCfgObj, "interval", interval).intValue();
                         Map<String, MobTemplate> mobs =
                                 whoCfgObj.has("mobs") ? parseNpcMobs(whoCfgObj.get("mobs"), logger) : Collections.emptyMap();
                         mobSpawnRegions =
@@ -89,6 +108,23 @@ public class NpcSpawnerConfig {
             }
         }
         this.mobSpawnRegions.forEach(r->r.mapCoincideRegion(this.blackListRegions));
+        this.mobSpawnRegions = Collections.unmodifiableList(this.mobSpawnRegions);
+    }
+
+    public int getInterval() {
+        return interval;
+    }
+
+    public int getMaxSpawnDistance() {
+        return maxSpawnDistance;
+    }
+
+    public int getMinSpawnDistance() {
+        return minSpawnDistance;
+    }
+
+    public List<NpcRegion.Spawn> getMobSpawnRegions() {
+        return mobSpawnRegions;
     }
 
     private JsonPrimitive getJsonPrimitive(JsonObject obj, String key) {
@@ -150,7 +186,7 @@ public class NpcSpawnerConfig {
 
     private Region3d parseRegion0(JsonArray ary) {
         if (ary.size() > 0 ){
-            if (ary.size() > 6) {
+            if (ary.size() > 5) {
                 return new Region3d(
                         getElementNumber(ary.get(0), 0).doubleValue(),
                         getElementNumber(ary.get(1), 0).doubleValue(),
@@ -159,7 +195,7 @@ public class NpcSpawnerConfig {
                         getElementNumber(ary.get(4), 1).doubleValue(),
                         getElementNumber(ary.get(5), 1).doubleValue()
                 );
-            } else if (ary.size() > 4) {
+            } else if (ary.size() > 3) {
                 return new Region3d(
                         getElementNumber(ary.get(0), 0).doubleValue(),
                         0,
@@ -224,10 +260,12 @@ public class NpcSpawnerConfig {
                 if (groupEle.isJsonObject()) {
                     JsonObject g_obj = groupEle.getAsJsonObject();
                     String world = getString(g_obj, "world", null);
+                    String name = getString(g_obj, "name", null);
                     if (world == null) {
                         logger.warn("NpcSpawner: world can't be empty in \"groups\"");
+                    } else if (name == null) {
+                        logger.warn("NpcSpawner: name can't be empty in \"groups\"");
                     } else {
-                        String name = getString(g_obj, "name", "group" + System.currentTimeMillis());
                         int density = getNumber(g_obj, "density", 20).intValue();
                         List<Region3d> regions = parseRegion(g_obj, "regions");
                         List<Region3d> excludes = parseRegion(g_obj, "excludes");
