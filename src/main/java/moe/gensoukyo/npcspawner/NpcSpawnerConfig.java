@@ -2,7 +2,6 @@ package moe.gensoukyo.npcspawner;
 
 import com.google.common.collect.ImmutableList;
 import com.google.gson.*;
-import moe.gensoukyo.npcspawner.looper.MainLooper;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.Logger;
 
@@ -51,7 +50,8 @@ public class NpcSpawnerConfig {
     //最大刷怪距离
     private int maxSpawnDistance;
     //刷怪触发间隔,以tick计算
-    private int interval;
+    private int minInterval;
+    private int maxInterval;
     //刷怪区的集合
     private List<NpcRegion.Spawn> mobSpawnRegions;
     //安全区的集合
@@ -64,7 +64,8 @@ public class NpcSpawnerConfig {
         this.spawnerConfig = file;
         this.minSpawnDistance = 12;
         this.maxSpawnDistance = 36;
-        this.interval = 300;
+        this.minInterval = 150;
+        this.maxInterval = 300;
         this.mobSpawnRegions = new ArrayList<>();
         this.blackListRegions = new ArrayList<>();
         this.refresh();
@@ -86,7 +87,8 @@ public class NpcSpawnerConfig {
                         int version = getNumber(whoCfgObj, "version", 1).intValue();
                         minSpawnDistance = getNumber(whoCfgObj, "minSpawnDistance", minSpawnDistance).intValue();
                         maxSpawnDistance = getNumber(whoCfgObj, "maxSpawnDistance", maxSpawnDistance).intValue();
-                        interval = getNumber(whoCfgObj, "interval", interval).intValue();
+                        minInterval = getNumber(whoCfgObj, "minInterval", minInterval).intValue();
+                        maxInterval = getNumber(whoCfgObj, "maxInterval", maxInterval).intValue();
                         Map<String, MobTemplate> mobs =
                                 whoCfgObj.has("mobs") ? parseNpcMobs(whoCfgObj.get("mobs"), logger) : Collections.emptyMap();
                         mobSpawnRegions =
@@ -111,8 +113,12 @@ public class NpcSpawnerConfig {
         this.mobSpawnRegions = Collections.unmodifiableList(this.mobSpawnRegions);
     }
 
-    public int getInterval() {
-        return interval;
+    public int getMinInterval() {
+        return minInterval;
+    }
+
+    public int getMaxInterval() {
+        return maxInterval;
     }
 
     public int getMaxSpawnDistance() {

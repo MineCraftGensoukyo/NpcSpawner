@@ -22,7 +22,6 @@ import noppes.npcs.api.entity.IEntity;
 import noppes.npcs.entity.EntityCustomNpc;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
@@ -36,13 +35,18 @@ public class NpcSpawner {
 
     private static Random random = new Random();
     private static boolean spawnedLastTime = true;
+    static boolean debugging = false;
+    static boolean pausing = false;
+    private static int remaining = -1;
 
     @SubscribeEvent
     public static void tick(TickEvent.WorldTickEvent event) {
+        if (pausing) return;
         NpcSpawnerConfig config = NpcSpawnerConfig.instance();
-        if (!spawnedLastTime || random.nextInt(config.getInterval()) == 0) {
+        if (!spawnedLastTime || remaining == 0) {
             spawnedLastTime = tryToSpawnMob((WorldServer) event.world, config);
         }
+        if (remaining >= 0) remaining--; else remaining = random.nextInt(config.getMaxInterval() - config.getMinInterval()) + config.getMinInterval();
     }
 
     // 返回false时，下一次尝试刷怪的时间将为下一游戏刻。
@@ -63,7 +67,7 @@ public class NpcSpawner {
                 size = Math.min(list.size(), size + 1);
                 continue;
             }
-            if (!(((EntityPlayerMP) player).interactionManager.getGameType().isSurvivalOrAdventure())) {
+            if (!debugging && !(((EntityPlayerMP) player).interactionManager.getGameType().isSurvivalOrAdventure())) {
                 list.remove(player);
                 size = Math.min(list.size(), size + 1);
                 continue;
@@ -103,6 +107,7 @@ public class NpcSpawner {
                         }
                         mob.reduceWeight();
                         spawned = true;
+                        if (debugging) ModMain.logger.info(String.format("Spawned a mob(%d,%s) at %s in region %s(%s)", mob.template.tab, mob.template.name, place, region.name, region.world));
                     }
                 } catch (Exception e) {
                     ModMain.logger.info("NpcSpawner：NPC[" + mob.template.name + "]生成失败，可能是配置文件中提供的信息有误");
@@ -113,8 +118,7 @@ public class NpcSpawner {
     }
 
     private static double calR(double min, double max) {
-        double r = random.nextDouble();
-        return ((max - min) * r + min) * (r * 2 - 1 > 0 ? 1 : -1);
+        return (random.nextDouble() * (max - min) + min) * (random.nextBoolean() ? -1 : 1);
     }
 
     @Nullable
