@@ -7,7 +7,8 @@
   "version": 2,
   "minSpawnDistance": 12,
   "maxSpawnDistance": 36,
-  "interval": 300,
+  "minInterval": 150,
+  "maxInterval": 300,
   "mobs": {
     "key1": {"tab": 6, "name": "nameOfSavedMob1"},
     "key2": {"tab": 6, "name": "nameOfSavedMob2"}
