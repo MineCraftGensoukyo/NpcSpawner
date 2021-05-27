@@ -25,7 +25,10 @@ public class CommandNpcSpawner extends CommandBase {
     @NotNull
     @Override
     public String getUsage(@NotNull ICommandSender sender) {
-        return "重载NPC配置文件：/npcspawner reload \n 查看当前位置划分区域: /npcspawner info";
+        return "重载NPC配置文件：/npcspawner reload \n"
+                + "查看当前位置划分区域: /npcspawner info\n"
+                + "暂停刷怪/npcspawner pause [true|false]\n"
+                + "调试模式/npcspawner debug [true|false]";
     }
 
     @Override
