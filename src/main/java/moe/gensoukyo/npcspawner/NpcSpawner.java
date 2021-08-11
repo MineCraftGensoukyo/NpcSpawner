@@ -12,6 +12,7 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.server.permission.PermissionAPI;
 import net.minecraftforge.server.permission.context.PlayerContext;
+import noppes.npcs.CustomNpcs;
 import noppes.npcs.api.NpcAPI;
 import noppes.npcs.entity.EntityCustomNpc;
 
@@ -31,6 +32,7 @@ public class NpcSpawner {
 
     @SubscribeEvent
     public static void tick(TickEvent.WorldTickEvent event) {
+        if (CustomNpcs.FreezeNPCs) return;
         if (random.nextInt(config.interval) == 0) {
             tryToSpawnMob((WorldServer) event.world);
         }
@@ -70,7 +72,7 @@ public class NpcSpawner {
             //选中的地点在不在某个刷怪区里
             for (NpcRegion.MobSpawnRegion mobSpawnRegion : config.mobSpawnRegions) {
                 //判断世界
-                if (!worldServer.getWorldInfo().getWorldName().toLowerCase().equals(mobSpawnRegion.world.toLowerCase())) {
+                if (!worldServer.getWorldInfo().getWorldName().equalsIgnoreCase(mobSpawnRegion.world)) {
                     continue;
                 }
                 //判断位置

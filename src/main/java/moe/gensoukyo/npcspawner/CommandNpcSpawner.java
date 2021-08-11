@@ -1,5 +1,6 @@
 package moe.gensoukyo.npcspawner;
 
+import com.google.common.collect.ImmutableList;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.server.MinecraftServer;
@@ -8,7 +9,6 @@ import net.minecraft.util.text.TextComponentString;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -43,9 +43,7 @@ public class CommandNpcSpawner extends CommandBase {
     @Override
     public List<String> getTabCompletions(MinecraftServer server, ICommandSender sender, String[] args, @Nullable BlockPos targetPos) {
         if (args.length == 1) {
-            ArrayList<String> a = new ArrayList<>();
-            a.add("reload");
-            return a;
+            return ImmutableList.of("reload");
         }
         return super.getTabCompletions(server, sender, args, targetPos);
     }
