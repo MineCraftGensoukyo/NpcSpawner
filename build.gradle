@@ -10,7 +10,7 @@ apply plugin: 'net.minecraftforge.gradle.forge'
 //Only edit below this line, the above code adds and enables the necessary things for Forge to be setup.
 
 
-version = "1.0.1"
+version = "1.0.2"
 group = "moe.gensoukyo.npcspawner" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
 archivesBaseName = "NpcSpawner"
 
@@ -30,6 +30,7 @@ repositories {
 }
 
 dependencies {
+    testCompile 'junit:junit:4.12'
     compile fileTree(dir: 'libs', include: '*.jar')
     implementation 'org.jetbrains:annotations:15.0'
     deobfCompile('noppes.npcs:CustomNPCs_1.12.2-(05Jul20)')

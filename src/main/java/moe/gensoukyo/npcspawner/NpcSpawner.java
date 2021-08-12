@@ -11,7 +11,6 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.server.permission.PermissionAPI;
-import net.minecraftforge.server.permission.context.PlayerContext;
 import noppes.npcs.CustomNpcs;
 import noppes.npcs.api.NpcAPI;
 import noppes.npcs.entity.EntityCustomNpc;
@@ -28,10 +27,14 @@ import java.util.Random;
 public class NpcSpawner {
 
     static NpcSpawnerConfig config;
-    private static Random random = new Random();
+    private static final Random random = new Random();
+    // the two cache array will occupy total 45Kb of memories: 8 Byte/double * 360 double / array * 2 array = 5760Byte = 46080 bits = 45k bits
+    private static final double[] ccos = new double[360];
+    private static final double[] csin = new double[360];
 
     @SubscribeEvent
     public static void tick(TickEvent.WorldTickEvent event) {
+        if (event.world.isRemote) return;
         if (CustomNpcs.FreezeNPCs) return;
         if (random.nextInt(config.interval) == 0) {
             tryToSpawnMob((WorldServer) event.world);
@@ -48,25 +51,26 @@ public class NpcSpawner {
         label:
         for (int i = 0; i < list.size() / 4 + 1; i++) {
             EntityPlayer player = list.get(random.nextInt(list.size()));
-            if (PermissionAPI.hasPermission(player.getGameProfile(), "npcspawner.noMobSpawn", new PlayerContext(player))) {
-                continue;
-            }
+            if (PermissionAPI.hasPermission(player, "npcspawner.noMobSpawn")) continue;
             //在这个倒霉鬼周围随便找个地方
             int r = config.minSpawnDistance + random.nextInt(config.maxSpawnDistance - config.minSpawnDistance);
-            double angle = Math.toRadians(random.nextInt(360));
-            double x = player.posX + r * Math.cos(angle);
-            double z = player.posZ + r * Math.sin(angle);
+            int angle = random.nextInt(360);
+            if (ccos[angle] == 0 && csin[angle] == 0) {
+                double rad = Math.toRadians(angle);
+                ccos[angle] = Math.cos(rad);
+                csin[angle] = Math.sin(rad);
+            }
+            double x = player.posX + r * ccos[angle];
+            double z = player.posZ + r * csin[angle];
+            double y;
             //自下而上找个高度
-            int y = 1;
-            for (int j = 0; j < 255; j++) {
-                if (worldServer.getBlockState(new BlockPos(x, j, z)).getBlock() == Blocks.AIR) {
-                    y = j;
-                    break;
-                }
+            double minY = Math.max(player.posY - 10, 0);
+            double maxY = Math.min(player.posY + 10, 255);
+            boolean findY = false;
+            for (y = minY; y < maxY + 1 && !findY; y++) {
+                findY = worldServer.getBlockState(new BlockPos(x, y, z)).getBlock() == Blocks.AIR;
             }
-            if (y > player.posY + 10) {
-                continue;
-            }
+            if (!findY) continue;
             Vec3d place = new Vec3d(x, y, z);
 
             //选中的地点在不在某个刷怪区里
@@ -117,7 +121,6 @@ public class NpcSpawner {
      */
     @Nullable
     public static NpcMob chooseMobToSpawn(NpcRegion.MobSpawnRegion mobSpawnRegion, boolean inWater, int time) {
-        ArrayList<Integer> weights = new ArrayList<>();
         ArrayList<NpcMob> properMobs = new ArrayList<>();
         for (NpcMob mob : mobSpawnRegion.mobs) {
             if (mob.waterMob == inWater) {
@@ -133,36 +136,28 @@ public class NpcSpawner {
             }
         }
         if (properMobs.size() > 0) {
+            int sum = 0, i = 0, size = properMobs.size();
+            int[] weights = new int[size + 1];
+            weights[i++] = 0;
             for (NpcMob properMob : properMobs) {
-                weights.add((int)(properMob.weight * 100));
+                int w = properMob.weight;
+                sum += w;
+                weights[i++] = sum;
             }
-            return properMobs.get(random(weights));
+            int rnd = random.nextInt(sum);
+            int bi = 0, ei = size - 1;
+            if (weights[bi + 1] > rnd) i = bi;
+            else if (weights[ei] <= rnd) i = ei;
+            else while (ei - bi > 1) {
+                i = bi + (ei - bi) / 2;
+                int w = weights[i], w1 = weights[i + 1];
+                if (rnd < w) ei = i;
+                else if (rnd >= w1) bi = i;
+                else break;
+            }
+            return properMobs.get(i);
         } else {
             return null;
         }
-    }
-
-    /**
-     * 权重随机数
-     * @param weight
-     * @return 索引值
-     */
-    public static int random(List<Integer> weight) {
-        List<Integer> weightTmp = new ArrayList<>(weight.size() + 1);
-        weightTmp.add(0);
-        Integer sum = 0;
-        for(Integer d : weight){
-            sum += d;
-            weightTmp.add(sum);
-        }
-        int rand = random.nextInt(sum);
-        int index = 0;
-        for(int i = weightTmp.size()-1; i >0; i--){
-            if( rand >= weightTmp.get(i)){
-                index = i;
-                break;
-            }
-        }
-        return index;
     }
 }

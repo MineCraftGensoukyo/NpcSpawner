@@ -7,7 +7,7 @@ public class NpcMob {
 
     int tab;
     String name;
-    double weight;
+    int weight;
     boolean waterMob = false;
     int timeStart = 0;
     int timeEnd = 24000;
@@ -20,7 +20,7 @@ public class NpcMob {
     public NpcMob(int tab, String name, double weight) {
         this.tab = tab;
         this.name = name;
-        this.weight = weight;
+        this.weight = (int) (weight * 100);
     }
 
     public void setWaterMob(boolean waterMob) {

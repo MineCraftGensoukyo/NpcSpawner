@@ -8,7 +8,6 @@ import org.apache.commons.io.FileUtils;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 
 /**
@@ -49,7 +48,7 @@ public class NpcSpawnerConfig {
 
     public void refresh() {
         if (ModMain.modConfigDi.exists()) {
-            spawnerConfig = Paths.get(ModMain.modConfigDi.getAbsolutePath(), "npcspawner.json").toFile();
+            spawnerConfig = new File(ModMain.modConfigDi, "npcspawner.json");
 
             if(!spawnerConfig.exists()) {
                 ModMain.logger.info("未找到NPC生成配置");
@@ -100,7 +99,7 @@ public class NpcSpawnerConfig {
         for (NpcRegion.MobSpawnRegion mobSpawnRegion : this.mobSpawnRegions) {
             mobSpawnRegion.blackList.clear();
             for (NpcRegion.BlackListRegion blackListRegion : this.blackListRegions) {
-                if (mobSpawnRegion.world.toLowerCase().equals(blackListRegion.world.toLowerCase())) {
+                if (mobSpawnRegion.world.equalsIgnoreCase(blackListRegion.world)) {
                     if (mobSpawnRegion.region.isCoincideWith(blackListRegion.region)) {
                         mobSpawnRegion.blackList.add(blackListRegion);
                     }
@@ -131,7 +130,7 @@ public class NpcSpawnerConfig {
         for (int i = 0; i < mobsJson.size(); i++) {
             JsonObject mobJson = mobsJson.get(i).getAsJsonObject();
             NpcMob mob = parseNpcMob(mobJson);
-            if (mob != null) {
+            if (mob != null && mob.weight > 0) {
                 npcMobs.add(mob);
             }
         }

@@ -31,10 +31,12 @@ public class CommandNpcSpawner extends CommandBase {
     @Override
     public void execute(@NotNull MinecraftServer server, @NotNull ICommandSender sender, String[] args) {
         if (args.length > 0) {
-            String reload = "reload";
-            if (reload.equals(args[0])) {
+            if ("reload".equalsIgnoreCase(args[0])) {
                 NpcSpawnerConfig.instance().refresh();
                 sender.sendMessage(new TextComponentString("已刷新，请通过控制台查看具体信息！"));
+                if (!(sender instanceof MinecraftServer)) {
+                    ModMain.logger.info("配置刷新");
+                }
             }
         }
     }
