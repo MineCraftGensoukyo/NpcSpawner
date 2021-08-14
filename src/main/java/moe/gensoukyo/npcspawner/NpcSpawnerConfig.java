@@ -8,7 +8,7 @@ import org.apache.commons.io.FileUtils;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
+import java.util.*;
 
 /**
  * @author SQwatermark
@@ -30,9 +30,9 @@ public class NpcSpawnerConfig {
     //刷怪触发间隔,以tick计算
     public int interval;
     //刷怪区的集合
-    ArrayList<NpcRegion.MobSpawnRegion> mobSpawnRegions;
+    Map<String, List<NpcRegion.MobSpawnRegion>> mobSpawnRegions;
     //安全区的集合
-    ArrayList<NpcRegion.BlackListRegion> blackListRegions;
+    Map<String, List<NpcRegion.BlackListRegion>> blackListRegions;
 
     //配置文件
     public File spawnerConfig;
@@ -41,8 +41,8 @@ public class NpcSpawnerConfig {
         minSpawnDistance = 12;
         maxSpawnDistance = 36;
         interval = 300;
-        mobSpawnRegions = new ArrayList<>();
-        blackListRegions = new ArrayList<>();
+        mobSpawnRegions = new HashMap<>();
+        blackListRegions = new HashMap<>();
         this.refresh();
     }
 
@@ -67,7 +67,8 @@ public class NpcSpawnerConfig {
                         JsonObject mobSpawnRegionJson = array.get(i).getAsJsonObject();
                         NpcRegion.MobSpawnRegion mobSpawnRegion = parseMobSpawnRegion(mobSpawnRegionJson);
                         if (mobSpawnRegion != null) {
-                            mobSpawnRegions.add(mobSpawnRegion);
+                            List<NpcRegion.MobSpawnRegion> list = mobSpawnRegions.computeIfAbsent(mobSpawnRegion.world, k -> new ArrayList<>());
+                            list.add(mobSpawnRegion);
                         }
                     }
                     try {
@@ -76,7 +77,8 @@ public class NpcSpawnerConfig {
                             JsonObject blackListRegionJson = array2.get(i).getAsJsonObject();
                             NpcRegion.BlackListRegion blackListRegion = parseBlackListRegion(blackListRegionJson);
                             if (blackListRegion != null) {
-                                blackListRegions.add(blackListRegion);
+                                List<NpcRegion.BlackListRegion> list = blackListRegions.computeIfAbsent(blackListRegion.world, k -> new ArrayList<>());
+                                list.add(blackListRegion);
                             }
                         }
                     } catch (Exception e) {
@@ -96,12 +98,13 @@ public class NpcSpawnerConfig {
                 ModMain.logger.info("已生成mcgproject目录 ");
             }
         }
-        for (NpcRegion.MobSpawnRegion mobSpawnRegion : this.mobSpawnRegions) {
-            mobSpawnRegion.blackList.clear();
-            for (NpcRegion.BlackListRegion blackListRegion : this.blackListRegions) {
-                if (mobSpawnRegion.world.equalsIgnoreCase(blackListRegion.world)) {
-                    if (mobSpawnRegion.region.isCoincideWith(blackListRegion.region)) {
-                        mobSpawnRegion.blackList.add(blackListRegion);
+        for (Map.Entry<String, List<NpcRegion.MobSpawnRegion>> e : this.mobSpawnRegions.entrySet()) {
+            List<NpcRegion.MobSpawnRegion> spList = e.getValue();
+            List<NpcRegion.BlackListRegion> bkList = this.blackListRegions.get(e.getKey());
+            if (bkList != null && !bkList.isEmpty()) {
+                for (NpcRegion.MobSpawnRegion mobRegion : spList) {
+                    for (NpcRegion.BlackListRegion blackRegion : bkList) {
+                        if (mobRegion.region.isCoincideWith(blackRegion.region)) mobRegion.blackList.add(blackRegion);
                     }
                 }
             }

@@ -13,12 +13,15 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.server.permission.PermissionAPI;
 import noppes.npcs.CustomNpcs;
 import noppes.npcs.api.NpcAPI;
+import noppes.npcs.api.entity.ICustomNpc;
+import noppes.npcs.api.entity.IEntity;
 import noppes.npcs.entity.EntityCustomNpc;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 /**
  * @author SQwatermark
@@ -34,24 +37,31 @@ public class NpcSpawner {
 
     @SubscribeEvent
     public static void tick(TickEvent.WorldTickEvent event) {
-        if (event.world.isRemote) return;
-        if (CustomNpcs.FreezeNPCs) return;
+        if (event.world.isRemote
+                || event.phase == TickEvent.Phase.END
+                || CustomNpcs.FreezeNPCs
+                || ModMain.pauseSpawn) return;
         if (random.nextInt(config.interval) == 0) {
             tryToSpawnMob((WorldServer) event.world);
         }
     }
 
     public static void tryToSpawnMob(WorldServer worldServer) {
+        String worldName = worldServer.getWorldInfo().getWorldName();
+        List<NpcRegion.MobSpawnRegion> regions = config.mobSpawnRegions.get(worldName);
+        if (regions == null || regions.isEmpty()) return;
 
         //随便找几个倒霉鬼
-        List<EntityPlayer> list = worldServer.playerEntities;
+        List<EntityPlayer> list = worldServer.playerEntities.stream()
+                .filter(p->!PermissionAPI.hasPermission(p, "npcspawner.noMobSpawn"))
+                .filter(p->((EntityPlayerMP)p).interactionManager.survivalOrAdventure() || ModMain.debugSpawn)
+                .collect(Collectors.toList());
         if (list.size() == 0) {
             return;
         }
         label:
         for (int i = 0; i < list.size() / 4 + 1; i++) {
             EntityPlayer player = list.get(random.nextInt(list.size()));
-            if (PermissionAPI.hasPermission(player, "npcspawner.noMobSpawn")) continue;
             //在这个倒霉鬼周围随便找个地方
             int r = config.minSpawnDistance + random.nextInt(config.maxSpawnDistance - config.minSpawnDistance);
             int angle = random.nextInt(360);
@@ -74,11 +84,7 @@ public class NpcSpawner {
             Vec3d place = new Vec3d(x, y, z);
 
             //选中的地点在不在某个刷怪区里
-            for (NpcRegion.MobSpawnRegion mobSpawnRegion : config.mobSpawnRegions) {
-                //判断世界
-                if (!worldServer.getWorldInfo().getWorldName().equalsIgnoreCase(mobSpawnRegion.world)) {
-                    continue;
-                }
+            for (NpcRegion.MobSpawnRegion mobSpawnRegion : regions) {
                 //判断位置
                 Vec2d vec2d = new Vec2d(place.x, place.z);
                 //如果选中的地点周围怪太多，则不能生成
@@ -103,8 +109,12 @@ public class NpcSpawner {
                     NpcMob mob = chooseMobToSpawn(mobSpawnRegion, inWater, timeOfDay);
                     if (mob != null) {
                         try {
-                            NpcAPI.Instance().getClones().spawn(place.x, place.y, place.z,
-                                    mob.tab, mob.name, NpcAPI.Instance().getIWorld(((EntityPlayerMP)player).getServerWorld()));
+                            IEntity<?> entity = NpcAPI.Instance().getClones().spawn(place.x, place.y, place.z,
+                                    mob.tab, mob.name, NpcAPI.Instance().getIWorld(worldServer));
+                            if (entity instanceof ICustomNpc<?>) {
+                                ICustomNpc<?> icn = (ICustomNpc<?>) entity;
+                                if (icn.getStats().getRespawnType() < 3) icn.getStats().setRespawnType(4);
+                            }
                         } catch (Exception e) {
                             ModMain.logger.info("NpcSpawner：NPC[" + mob.name + "]生成失败，可能是配置文件中提供的信息有误");
                         }
