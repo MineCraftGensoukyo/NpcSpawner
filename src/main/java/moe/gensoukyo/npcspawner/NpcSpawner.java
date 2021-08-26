@@ -19,6 +19,7 @@ import noppes.npcs.entity.EntityCustomNpc;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.stream.Collectors;
@@ -35,6 +36,9 @@ public class NpcSpawner {
     private static final double[] ccos = new double[360];
     private static final double[] csin = new double[360];
 
+    public static HashSet<String> blkList = new HashSet<>();
+    public static boolean enableBlkList = false;
+
     @SubscribeEvent
     public static void tick(TickEvent.WorldTickEvent event) {
         if (event.world.isRemote
@@ -48,6 +52,7 @@ public class NpcSpawner {
 
     public static void tryToSpawnMob(WorldServer worldServer) {
         String worldName = worldServer.getWorldInfo().getWorldName();
+        if (enableBlkList && blkList.contains(worldName)) return;
         List<NpcRegion.MobSpawnRegion> regions = config.mobSpawnRegions.get(worldName);
         if (regions == null || regions.isEmpty()) return;
 
