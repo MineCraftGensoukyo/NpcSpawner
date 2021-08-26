@@ -61,7 +61,8 @@ public class NpcSpawner {
         }
         label:
         for (int i = 0; i < list.size() / 4 + 1; i++) {
-            EntityPlayer player = list.get(random.nextInt(list.size()));
+            int playerIn = random.nextInt(list.size());
+            EntityPlayer player = list.get(playerIn);
             //在这个倒霉鬼周围随便找个地方
             int r = config.minSpawnDistance + random.nextInt(config.maxSpawnDistance - config.minSpawnDistance);
             int angle = random.nextInt(360);
@@ -89,9 +90,10 @@ public class NpcSpawner {
                 Vec2d vec2d = new Vec2d(place.x, place.z);
                 //如果选中的地点周围怪太多，则不能生成
                 if (worldServer.getEntitiesWithinAABB(EntityCustomNpc.class,
-                        new AxisAlignedBB(x - 50, y - 50, z - 50, x + 50, y + 50, z + 50)).size() > mobSpawnRegion.density) {
+                        new AxisAlignedBB(x - 50, y - 50, z - 50, x + 50, y + 50, z + 50)).size() >= mobSpawnRegion.density) {
                     continue;
                 }
+                if (anyPlayerInDistance(list, playerIn, x, y, z, config.minSpawnDistance, config.minSpawnDisPow)) continue label;
                 //要在刷怪区内
                 if (mobSpawnRegion.region.isVecInRegion(vec2d) && mobSpawnRegion.region.isVecInRegion(new Vec2d(player.posX, player.posZ))) {
                     //如果在黑名单内，则不刷怪
@@ -169,5 +171,23 @@ public class NpcSpawner {
         } else {
             return null;
         }
+    }
+
+    public static boolean anyPlayerInDistance(List<EntityPlayer> src, int playerIn, double x, double y, double z, double min, double d2) {
+        for (int i = 0; i < src.size(); i++) {
+            if (i == playerIn) continue;
+            EntityPlayer p = src.get(i);
+            double dx = abs(p.posX - x);
+            double dy = abs(p.posY - y);
+            double dz = abs(p.posZ - z);
+            if (dx > min || dy > min || dz > min) continue;
+            double ds = dx * dx + dy * dy + dz * dz;
+            if (ds < d2) return true;
+        }
+        return false;
+    }
+
+    public static double abs(double a) {
+        return a < 0 ? -a : a;
     }
 }

@@ -39,20 +39,23 @@ public class CommandNpcSpawner extends CommandBase {
                     ModMain.logger.info("配置刷新");
                 }
             } else if ("pause".equalsIgnoreCase(args[0])) {
+                boolean last = ModMain.pauseSpawn;
                 if (args.length > 1) {
                     String s = args[1];
                     ModMain.pauseSpawn = s.equalsIgnoreCase("true") || s.equals("1");
                 }
                 String msg = "现在的刷怪器状态: " + (ModMain.pauseSpawn ? "§c暂停" : "§a运行");
                 sender.sendMessage(new TextComponentString(msg));
-                if (!(sender instanceof MinecraftServer)) ModMain.logger.info(msg);
+                if (last != ModMain.pauseSpawn && !(sender instanceof MinecraftServer)) ModMain.logger.info(msg);
             } else if ("debug".equalsIgnoreCase(args[0])) {
+                boolean last = ModMain.debugSpawn;
                 if (args.length > 1) {
                     String s = args[1];
                     ModMain.debugSpawn = s.equalsIgnoreCase("true") || s.equals("1");
                 }
                 String msg = "现在的调试状态: " + (ModMain.debugSpawn ? "§c开" : "§a关");
                 sender.sendMessage(new TextComponentString(msg));
+                if (last != ModMain.debugSpawn && !(sender instanceof MinecraftServer)) ModMain.logger.info(msg);
             }
         }
     }

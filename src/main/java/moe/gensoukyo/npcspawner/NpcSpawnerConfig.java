@@ -25,6 +25,7 @@ public class NpcSpawnerConfig {
 
     //最小刷怪距离
     public int minSpawnDistance;
+    public int minSpawnDisPow;
     //最大刷怪距离
     public int maxSpawnDistance;
     //刷怪触发间隔,以tick计算
@@ -39,6 +40,7 @@ public class NpcSpawnerConfig {
 
     private NpcSpawnerConfig() {
         minSpawnDistance = 12;
+        minSpawnDisPow = 144;
         maxSpawnDistance = 36;
         interval = 300;
         mobSpawnRegions = new HashMap<>();
@@ -109,6 +111,7 @@ public class NpcSpawnerConfig {
                 }
             }
         }
+        minSpawnDisPow = minSpawnDistance * minSpawnDistance;
     }
 
     public NpcRegion.MobSpawnRegion parseMobSpawnRegion(JsonObject mobSpawnRegionJson) {
