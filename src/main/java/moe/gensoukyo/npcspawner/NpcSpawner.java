@@ -39,14 +39,18 @@ public class NpcSpawner {
     public static HashSet<String> blkList = new HashSet<>();
     public static boolean enableBlkList = false;
 
+    private static int remainingTick = -1;
+
     @SubscribeEvent
     public static void tick(TickEvent.WorldTickEvent event) {
         if (event.world.isRemote
                 || event.phase == TickEvent.Phase.END
                 || CustomNpcs.FreezeNPCs
                 || ModMain.pauseSpawn) return;
-        if (random.nextInt(config.interval) == 0) {
+        remainingTick --;
+        if (remainingTick < 0) {
             tryToSpawnMob((WorldServer) event.world);
+            remainingTick = config.intervalMin + random.nextInt(config.intervalLength);
         }
     }
 
@@ -65,9 +69,8 @@ public class NpcSpawner {
             return;
         }
         label:
-        for (int i = 0; i < list.size() / 4 + 1; i++) {
-            int playerIn = random.nextInt(list.size());
-            EntityPlayer player = list.get(playerIn);
+        for (int i = random.nextInt(4); i < list.size(); i += 4) {
+            EntityPlayer player = list.get(i);
             //在这个倒霉鬼周围随便找个地方
             int r = config.minSpawnDistance + random.nextInt(config.maxSpawnDistance - config.minSpawnDistance);
             int angle = random.nextInt(360);
@@ -98,7 +101,7 @@ public class NpcSpawner {
                         new AxisAlignedBB(x - 50, y - 50, z - 50, x + 50, y + 50, z + 50)).size() >= mobSpawnRegion.density) {
                     continue;
                 }
-                if (anyPlayerInDistance(list, playerIn, x, y, z, config.minSpawnDistance, config.minSpawnDisPow)) continue label;
+                if (anyPlayerInDistance(list, i, x, y, z, config.minSpawnDistance, config.minSpawnDisPow)) continue label;
                 //要在刷怪区内
                 if (mobSpawnRegion.region.isVecInRegion(vec2d) && mobSpawnRegion.region.isVecInRegion(new Vec2d(player.posX, player.posZ))) {
                     //如果在黑名单内，则不刷怪

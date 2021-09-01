@@ -29,7 +29,9 @@ public class NpcSpawnerConfig {
     //最大刷怪距离
     public int maxSpawnDistance;
     //刷怪触发间隔,以tick计算
-    public int interval;
+    private int interval;
+    public int intervalMin;
+    public int intervalLength;
     //刷怪区的集合
     Map<String, List<NpcRegion.MobSpawnRegion>> mobSpawnRegions;
     //安全区的集合
@@ -112,6 +114,9 @@ public class NpcSpawnerConfig {
             }
         }
         minSpawnDisPow = minSpawnDistance * minSpawnDistance;
+        intervalLength = interval / 4;
+        intervalMin = interval - intervalLength;
+        intervalLength += intervalLength;
     }
 
     public NpcRegion.MobSpawnRegion parseMobSpawnRegion(JsonObject mobSpawnRegionJson) {
