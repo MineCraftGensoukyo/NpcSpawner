@@ -127,7 +127,7 @@ public class NpcSpawnerConfig {
             JsonArray pos2 = mobSpawnRegionJson.get("pos2").getAsJsonArray();
             int density = mobSpawnRegionJson.get("density").getAsInt();
             JsonArray mobs = mobSpawnRegionJson.get("mobs").getAsJsonArray();
-            return new NpcRegion.MobSpawnRegion(name, new Region2d(pos1.get(0).getAsDouble(),
+            return new NpcRegion.MobSpawnRegion(name, new Region3d(pos1.get(0).getAsDouble(),
                     pos1.get(1).getAsDouble(), pos2.get(0).getAsDouble(), pos2.get(1).getAsDouble()), density, parseNpcMobs(mobs), world);
         } catch (Exception e) {
             ModMain.logger.error("MCGProject：刷怪配置解析错误！刷怪区信息不符合规范！已跳过该刷怪区！");
@@ -154,7 +154,7 @@ public class NpcSpawnerConfig {
             int tab = mobJson.get("tab").getAsInt();
             String mobName = mobJson.get("name").getAsString();
             double weight = mobJson.get("weight").getAsDouble();
-            NpcMob mob = new NpcMob(tab, mobName, weight);
+            NpcMob mob = new NpcMob(tab, mobName, (int) weight * 100);
             if (mobJson.has("waterMob")) {
                 mob.setWaterMob(mobJson.get("waterMob").getAsBoolean());
             }
@@ -175,7 +175,7 @@ public class NpcSpawnerConfig {
             JsonArray pos1 = blackListRegionJson.get("pos1").getAsJsonArray();
             JsonArray pos2 = blackListRegionJson.get("pos2").getAsJsonArray();
             String world = blackListRegionJson.get("world").getAsString();
-            return new NpcRegion.BlackListRegion(name, new Region2d(pos1.get(0).getAsDouble(),
+            return new NpcRegion.BlackListRegion(name, new Region3d(pos1.get(0).getAsDouble(),
                     pos1.get(1).getAsDouble(), pos2.get(0).getAsDouble(), pos2.get(1).getAsDouble()), true, world);
         } catch (Exception e) {
             ModMain.logger.error("MCGProject：刷怪配置解析错误！安全区信息不符合规范！已跳过该安全区！");

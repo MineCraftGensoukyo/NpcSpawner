@@ -32,9 +32,6 @@ public class NpcSpawner {
 
     static NpcSpawnerConfig config;
     private static final Random random = new Random();
-    // the two cache array will occupy total 45Kb of memories: 8 Byte/double * 360 double / array * 2 array = 5760Byte = 46080 bits = 45k bits
-    private static final double[] ccos = new double[360];
-    private static final double[] csin = new double[360];
 
     public static HashSet<String> blkList = new HashSet<>();
     public static boolean enableBlkList = false;
@@ -68,19 +65,13 @@ public class NpcSpawner {
         if (list.size() == 0) {
             return;
         }
-        label:
         for (int i = random.nextInt(4); i < list.size(); i += 4) {
             EntityPlayer player = list.get(i);
             //在这个倒霉鬼周围随便找个地方
             int r = config.minSpawnDistance + random.nextInt(config.maxSpawnDistance - config.minSpawnDistance);
-            int angle = random.nextInt(360);
-            if (ccos[angle] == 0 && csin[angle] == 0) {
-                double rad = Math.toRadians(angle);
-                ccos[angle] = Math.cos(rad);
-                csin[angle] = Math.sin(rad);
-            }
-            double x = player.posX + r * ccos[angle];
-            double z = player.posZ + r * csin[angle];
+            double[] cos_sin = MathUtils.unsafe_cos_sin(random.nextInt(360));
+            double x = player.posX + r * cos_sin[0];
+            double z = player.posZ + r * cos_sin[1];
             double y;
             //自下而上找个高度
             double minY = Math.max(player.posY - 10, 0);
@@ -90,47 +81,32 @@ public class NpcSpawner {
                 findY = worldServer.getBlockState(new BlockPos(x, y, z)).getBlock() == Blocks.AIR;
             }
             if (!findY) continue;
-            Vec3d place = new Vec3d(x, y, z);
-
-            //选中的地点在不在某个刷怪区里
-            for (NpcRegion.MobSpawnRegion mobSpawnRegion : regions) {
-                //判断位置
-                Vec2d vec2d = new Vec2d(place.x, place.z);
-                //如果选中的地点周围怪太多，则不能生成
-                if (worldServer.getEntitiesWithinAABB(EntityCustomNpc.class,
-                        new AxisAlignedBB(x - 50, y - 50, z - 50, x + 50, y + 50, z + 50)).size() >= mobSpawnRegion.density) {
-                    continue;
-                }
-                if (anyPlayerInDistance(list, i, x, y, z, config.minSpawnDistance, config.minSpawnDisPow)) continue label;
-                //要在刷怪区内
-                if (mobSpawnRegion.region.isVecInRegion(vec2d) && mobSpawnRegion.region.isVecInRegion(new Vec2d(player.posX, player.posZ))) {
-                    //如果在黑名单内，则不刷怪
-                    for (NpcRegion.BlackListRegion blackListRegion : mobSpawnRegion.blackList) {
-                        if (blackListRegion.region.isVecInRegion(vec2d)) {
-                            continue label;
-                        }
-                        if (blackListRegion.region.isVecInRegion(new Vec2d(player.posX, player.posZ))) {
-                            continue label;
-                        }
-                    }
-                    //如果在刷怪区且不在黑名单内，随便挑一个怪物生成
-                    boolean inWater = worldServer.getBlockState(new BlockPos(place.x, place.y - 1, place.z)).getBlock() == Blocks.WATER;
-                    int timeOfDay = (int)(worldServer.getWorldTime() % 24000);
-                    NpcMob mob = chooseMobToSpawn(mobSpawnRegion, inWater, timeOfDay);
-                    if (mob != null) {
-                        try {
-                            IEntity<?> entity = NpcAPI.Instance().getClones().spawn(place.x, place.y, place.z,
-                                    mob.tab, mob.name, NpcAPI.Instance().getIWorld(worldServer));
-                            if (entity instanceof ICustomNpc<?>) {
-                                ICustomNpc<?> icn = (ICustomNpc<?>) entity;
-                                if (icn.getStats().getRespawnType() < 3) icn.getStats().setRespawnType(4);
+            if (anyPlayerInDistance(list, i, x, y, z, config.minSpawnDistance, config.minSpawnDisPow)) continue;
+            final Vec3d place = new Vec3d(x, y, z);
+            final Vec3d pl_loc = player.getPositionVector();
+            final AxisAlignedBB aabb = new AxisAlignedBB(x - 50, y - 50, z - 50, x + 50, y + 50, z + 50);
+            final int densityNow = worldServer.getEntitiesWithinAABB(EntityCustomNpc.class, aabb).size();
+            regions.stream()
+                    .filter(region -> densityNow < region.density
+                            && (region.region.isVecInRegion(pl_loc) && region.region.isVecInRegion(place))
+                            && region.blackList.stream().noneMatch(blkRegion -> blkRegion.region.isVecInRegion(pl_loc) || blkRegion.region.isVecInRegion(place)))
+                    .findAny().ifPresent(mobSpawnRegion -> {
+                        boolean inWater = worldServer.getBlockState(new BlockPos(place.x, place.y-1, place.z)).getBlock() == Blocks.WATER;
+                        int timeOfDay = (int) (worldServer.getWorldTime() % 24000);
+                        NpcMob mob = chooseMobToSpawn(mobSpawnRegion, inWater, timeOfDay);
+                        if (mob != null) {
+                            try {
+                                IEntity<?> entity = NpcAPI.Instance().getClones().spawn(place.x, place.y, place.z,
+                                        mob.tab, mob.name, NpcAPI.Instance().getIWorld(worldServer));
+                                if (entity instanceof ICustomNpc<?>) {
+                                    ICustomNpc<?> icn = (ICustomNpc<?>) entity;
+                                    if (icn.getStats().getRespawnType() < 3) icn.getStats().setRespawnType(4);
+                                }
+                            } catch (Exception e) {
+                                ModMain.logger.info("NpcSpawner：NPC[" + mob.name + "]生成失败，可能是配置文件中提供的信息有误");
                             }
-                        } catch (Exception e) {
-                            ModMain.logger.info("NpcSpawner：NPC[" + mob.name + "]生成失败，可能是配置文件中提供的信息有误");
                         }
-                    }
-                }
-            }
+                    });
         }
     }
 

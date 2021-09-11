@@ -8,7 +8,7 @@ import java.util.ArrayList;
 public class NpcRegion {
 
     public String name;
-    public Region2d region;
+    public Region3d region;
     public String world;
 
     /**
@@ -23,7 +23,7 @@ public class NpcRegion {
          */
         public ArrayList<BlackListRegion> blackList;
 
-        public MobSpawnRegion(String name, Region2d region, int density, ArrayList<NpcMob> mobs, String world) {
+        public MobSpawnRegion(String name, Region3d region, int density, ArrayList<NpcMob> mobs, String world) {
             this.name = name;
             this.region = region;
             this.density = density;
@@ -39,7 +39,7 @@ public class NpcRegion {
     public static class BlackListRegion extends NpcRegion {
 
         public boolean delete;
-        public BlackListRegion(String name, Region2d region, boolean delete, String world) {
+        public BlackListRegion(String name, Region3d region, boolean delete, String world) {
             this.name = name;
             this.region = region;
             this.delete = delete;

@@ -3,6 +3,7 @@ package moe.gensoukyo.npcspawner;
 /**
  * @author SQwatermark
  */
+@Deprecated
 public class Region2d implements Cloneable {
 
     public Vec2d vec1;

@@ -3,6 +3,7 @@ package moe.gensoukyo.npcspawner;
 /**
  * @author SQwatermark
  */
+@Deprecated
 public class Vec2d {
 
     public double x;
