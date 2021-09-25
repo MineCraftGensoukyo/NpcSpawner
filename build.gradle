@@ -7,7 +7,7 @@ buildscript {
     }
     dependencies {
         classpath 'net.minecraftforge.gradle:ForgeGradle:4.1.+'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.5.30"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.5.31"
     }
 }
 apply plugin: "org.jetbrains.kotlin.jvm"
@@ -15,7 +15,7 @@ apply plugin: 'net.minecraftforge.gradle'
 //Only edit below this line, the above code adds and enables the necessary things for Forge to be setup.
 
 
-version = "1.0.7"
+version = "1.0.8a"
 group = "moe.gensoukyo.npcspawner" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
 archivesBaseName = "NpcSpawner"
 

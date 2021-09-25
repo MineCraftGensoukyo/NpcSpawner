@@ -29,21 +29,10 @@ class Region3d {
     }
 
     constructor(x1: Double, z1: Double, x2: Double, z2: Double) : this(x1, 0.0, z1, x2, 255.0, z2)
-    constructor(vec1: Vec2d, vec2: Vec2d) : this(vec1.x, vec1.y, vec2.x, vec2.y)
-
-    fun isVecInRegion(vec2d: Vec2d) = vecIn2d(vec2d.x, vec2d.y)
 
     fun isVecInRegion(v: Vec3d) = vecIn2d(v.x, v.z) && v.y > vec1.y && v.y < vec2.y
 
     private fun vecIn2d(x: Double, z: Double) = x > vec1.x && x < vec2.x && z > vec1.z && z < vec2.z
-
-    fun isCoincideWith(region: Region2d): Boolean {
-        val a1 = vec1
-        val a2 = vec2
-        val b1 = region.vec1
-        val b2 = region.vec2
-        return a2.x > b1.x && a1.x < b2.x && a1.z < b2.y && a2.z > b1.y
-    }
 
     fun isCoincideWith(region: Region3d): Boolean {
         val a1 = vec1

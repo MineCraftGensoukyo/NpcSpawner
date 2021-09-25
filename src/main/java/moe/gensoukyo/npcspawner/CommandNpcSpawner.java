@@ -9,6 +9,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import java.lang.ref.WeakReference;
 import java.util.List;
 
 /**
@@ -31,15 +32,33 @@ public class CommandNpcSpawner extends CommandBase {
                 "临时世界黑名单: /npcspawner blacklist [on|off|add|rm|clr|ls] [world]";
     }
 
+    private String playerStr(String msg) {
+        return "[npcspawner]" + msg;
+    }
+
+    private String consoleStr(String msg, ICommandSender sender) {
+        return "[@" + sender.getName() + "]" + msg;
+    }
+
     @Override
     public void execute(@NotNull MinecraftServer server, @NotNull ICommandSender sender, String[] args) {
         if (args.length > 0) {
             boolean isServer = sender instanceof MinecraftServer;
             Logger logger = ModMain.logger;
             if ("reload".equalsIgnoreCase(args[0])) {
-                NpcSpawnerConfig.instance().refresh();
-                sender.sendMessage(new TextComponentString("已刷新，请通过控制台查看具体信息！"));
-                if (!isServer) logger.info("配置刷新");
+                sender.sendMessage(new TextComponentString(playerStr("刷新配置中...")));
+                WeakReference<ICommandSender> senderRef = new WeakReference<>(sender);
+                String senderName = sender.getName();
+                ThreadLooper.getLooper().add(()->{
+                    NpcSpawnerConfig.reload();
+                    MainLooper.START.add(()->{
+                        if (!isServer) ModMain.logger.info("[@" + senderName + "]配置刷新");
+                        ICommandSender weakSender = senderRef.get();
+                        if (weakSender != null) {
+                            weakSender.sendMessage(new TextComponentString(playerStr("配置刷新完成")));
+                        }
+                    });
+                });
             } else if ("pause".equalsIgnoreCase(args[0])) {
                 boolean last = ModMain.pauseSpawn;
                 if (args.length > 1) {
@@ -47,8 +66,8 @@ public class CommandNpcSpawner extends CommandBase {
                     ModMain.pauseSpawn = s.equalsIgnoreCase("true") || s.equals("1");
                 }
                 String msg = "现在的刷怪器状态: " + (ModMain.pauseSpawn ? "§c暂停" : "§a运行");
-                sender.sendMessage(new TextComponentString(msg));
-                if (last != ModMain.pauseSpawn && !isServer) logger.info(msg);
+                sender.sendMessage(new TextComponentString(playerStr(msg)));
+                if (last != ModMain.pauseSpawn && !isServer) logger.info(consoleStr(msg, sender));
             } else if ("debug".equalsIgnoreCase(args[0])) {
                 boolean last = ModMain.debugSpawn;
                 if (args.length > 1) {
@@ -56,27 +75,27 @@ public class CommandNpcSpawner extends CommandBase {
                     ModMain.debugSpawn = s.equalsIgnoreCase("true") || s.equals("1");
                 }
                 String msg = "现在的调试状态: " + (ModMain.debugSpawn ? "§c开" : "§a关");
-                sender.sendMessage(new TextComponentString(msg));
-                if (last != ModMain.debugSpawn && !isServer) logger.info(msg);
+                sender.sendMessage(new TextComponentString(playerStr(msg)));
+                if (last != ModMain.debugSpawn && !isServer) logger.info(consoleStr(msg, sender));
             } else if ("blacklist".equalsIgnoreCase(args[0])) {
                 if (args.length > 1) {
                     if ("on".equalsIgnoreCase(args[1])) {
                         boolean last = NpcSpawner.enableBlkList;
                         NpcSpawner.enableBlkList = true;
                         String msg = "刷怪世界黑名单: §con";
-                        sender.sendMessage(new TextComponentString(msg));
-                        if (!last && !isServer) logger.info(msg);
+                        sender.sendMessage(new TextComponentString(playerStr(msg)));
+                        if (!last && !isServer) logger.info(consoleStr(msg,sender));
                     } else if ("off".equalsIgnoreCase(args[1])) {
                         boolean last = NpcSpawner.enableBlkList;
                         NpcSpawner.enableBlkList = false;
                         String msg = "刷怪世界黑名单: §aoff";
-                        sender.sendMessage(new TextComponentString(msg));
-                        if (last && !isServer) logger.info(msg);
+                        sender.sendMessage(new TextComponentString(playerStr(msg)));
+                        if (last && !isServer) logger.info(consoleStr(msg, sender));
                     } else if ("clr".equalsIgnoreCase(args[1])) {
                         NpcSpawner.blkList.clear();
                         String msg = "刷怪世界黑名单: 名单已重置";
-                        sender.sendMessage(new TextComponentString(msg));
-                        if (!isServer) logger.info(msg);
+                        sender.sendMessage(new TextComponentString(playerStr(msg)));
+                        if (!isServer) logger.info(consoleStr(msg, sender));
                     } else if ("ls".equalsIgnoreCase(args[1])) {
                         if (NpcSpawner.blkList.size() == 0) {
                             sender.sendMessage(new TextComponentString("黑名单为空"));
@@ -90,8 +109,8 @@ public class CommandNpcSpawner extends CommandBase {
                             if (args[2] != null) {
                                 boolean f = NpcSpawner.blkList.add(args[2]);
                                 String msg = "刷怪世界黑名单已§a添加: " + args[2];
-                                sender.sendMessage(new TextComponentString(msg));
-                                if (f && !isServer) logger.info(msg);
+                                sender.sendMessage(new TextComponentString(playerStr(msg)));
+                                if (f && !isServer) logger.info(consoleStr(msg, sender));
                             }
                         }
                     } else if ("rm".equalsIgnoreCase(args[1])) {
@@ -99,8 +118,8 @@ public class CommandNpcSpawner extends CommandBase {
                             if (args[2] != null) {
                                 boolean f = NpcSpawner.blkList.remove(args[2]);
                                 String msg = "刷怪世界黑名单已§c移除: " + args[2];
-                                sender.sendMessage(new TextComponentString(msg));
-                                if (f && !isServer) logger.info(msg);
+                                sender.sendMessage(new TextComponentString(playerStr(msg)));
+                                if (f && !isServer) logger.info(consoleStr(msg, sender));
                             }
                         }
                     }

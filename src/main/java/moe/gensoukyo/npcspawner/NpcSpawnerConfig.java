@@ -9,6 +9,7 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * @author SQwatermark
@@ -16,11 +17,33 @@ import java.util.*;
 public class NpcSpawnerConfig {
 
     private static NpcSpawnerConfig instance;
+    private static NpcSpawnerConfig backInstance;
+    private static final ReentrantLock lock = new ReentrantLock();
+
     public static NpcSpawnerConfig instance() {
-        if(instance == null) {
-            instance = new NpcSpawnerConfig();
+        if (lock.tryLock()) {
+            try {
+                if (instance == null) {
+                    instance = backInstance != null ? backInstance : new NpcSpawnerConfig();
+                } else {
+                    instance = backInstance != null ? backInstance : instance;
+                }
+                backInstance = null;
+            } finally {
+                lock.unlock();
+            }
         }
         return instance;
+    }
+
+    public static void reload() {
+        NpcSpawnerConfig cfg = new NpcSpawnerConfig();
+        lock.lock();
+        try {
+            backInstance = cfg;
+        } finally {
+            lock.unlock();
+        }
     }
 
     //最小刷怪距离
@@ -47,10 +70,10 @@ public class NpcSpawnerConfig {
         interval = 300;
         mobSpawnRegions = new HashMap<>();
         blackListRegions = new HashMap<>();
-        this.refresh();
+        this.load();
     }
 
-    public void refresh() {
+    private void load() {
         if (ModMain.modConfigDi.exists()) {
             spawnerConfig = new File(ModMain.modConfigDi, "npcspawner.json");
 

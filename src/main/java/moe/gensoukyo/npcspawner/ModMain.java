@@ -1,9 +1,11 @@
 package moe.gensoukyo.npcspawner;
 
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
+import net.minecraftforge.fml.common.event.FMLServerStoppedEvent;
 import net.minecraftforge.server.permission.DefaultPermissionLevel;
 import net.minecraftforge.server.permission.PermissionAPI;
 import org.apache.logging.log4j.Logger;
@@ -47,6 +49,18 @@ public class ModMain {
     @Mod.EventHandler
     public void serverLoad(FMLServerStartingEvent event) {
         event.registerServerCommand(new CommandNpcSpawner());
+        MainLooper.START.stateStart();
+        MainLooper.END.stateStart();
+        MinecraftForge.EVENT_BUS.register(MainLooper.START);
+        MinecraftForge.EVENT_BUS.register(MainLooper.END);
+    }
+
+    @Mod.EventHandler
+    public void serverStopping(FMLServerStoppedEvent event) {
+        MainLooper.START.stateStop();
+        MainLooper.END.stateStop();
+        MinecraftForge.EVENT_BUS.unregister(MainLooper.START);
+        MinecraftForge.EVENT_BUS.unregister(MainLooper.END);
     }
 
 }
