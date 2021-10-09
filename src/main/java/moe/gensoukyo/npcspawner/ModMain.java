@@ -1,16 +1,16 @@
 package moe.gensoukyo.npcspawner;
 
+import moe.gensoukyo.npcspawner.looper.MainLooper;
+import moe.gensoukyo.npcspawner.looper.ThreadLooper;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.common.event.FMLInitializationEvent;
-import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
-import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
-import net.minecraftforge.fml.common.event.FMLServerStoppedEvent;
+import net.minecraftforge.fml.common.event.*;
 import net.minecraftforge.server.permission.DefaultPermissionLevel;
 import net.minecraftforge.server.permission.PermissionAPI;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
+import java.nio.file.Paths;
 
 /**
  * @author SQwatermark
@@ -25,7 +25,7 @@ public class ModMain {
 
     public static final String MOD_ID = "npcspawner";
     public static final String MOD_NAME = "NpcSpawner";
-    public static final String VERSION = "1.0.6";
+    public static final String VERSION = "1.0.8";
 
     public static Logger logger;
 
@@ -49,18 +49,20 @@ public class ModMain {
     @Mod.EventHandler
     public void serverLoad(FMLServerStartingEvent event) {
         event.registerServerCommand(new CommandNpcSpawner());
-        MainLooper.START.stateStart();
-        MainLooper.END.stateStart();
+        MainLooper.START.prepare();
+        MainLooper.END.prepare();
         MinecraftForge.EVENT_BUS.register(MainLooper.START);
         MinecraftForge.EVENT_BUS.register(MainLooper.END);
+        ThreadLooper.getLooper().prepare();
     }
 
     @Mod.EventHandler
-    public void serverStopping(FMLServerStoppedEvent event) {
-        MainLooper.START.stateStop();
-        MainLooper.END.stateStop();
+    public void serverStopping(FMLServerStoppingEvent event) {
+        MainLooper.START.exit();
+        MainLooper.END.exit();
         MinecraftForge.EVENT_BUS.unregister(MainLooper.START);
         MinecraftForge.EVENT_BUS.unregister(MainLooper.END);
+        ThreadLooper.getLooper().exit();
     }
 
 }

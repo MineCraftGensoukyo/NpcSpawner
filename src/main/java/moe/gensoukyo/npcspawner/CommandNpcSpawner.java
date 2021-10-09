@@ -49,15 +49,12 @@ public class CommandNpcSpawner extends CommandBase {
                 sender.sendMessage(new TextComponentString(playerStr("刷新配置中...")));
                 WeakReference<ICommandSender> senderRef = new WeakReference<>(sender);
                 String senderName = sender.getName();
-                ThreadLooper.getLooper().add(()->{
-                    NpcSpawnerConfig.reload();
-                    MainLooper.START.add(()->{
-                        if (!isServer) ModMain.logger.info("[@" + senderName + "]配置刷新");
-                        ICommandSender weakSender = senderRef.get();
-                        if (weakSender != null) {
-                            weakSender.sendMessage(new TextComponentString(playerStr("配置刷新完成")));
-                        }
-                    });
+                NpcSpawnerConfig.reload(()->{
+                    if (!isServer) ModMain.logger.info("[@" + senderName + "]配置刷新");
+                    ICommandSender weakSender = senderRef.get();
+                    if (weakSender != null) {
+                        weakSender.sendMessage(new TextComponentString(playerStr("配置刷新完成")));
+                    }
                 });
             } else if ("pause".equalsIgnoreCase(args[0])) {
                 boolean last = ModMain.pauseSpawn;

@@ -6,7 +6,7 @@ buildscript {
         }
     }
     dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:4.1.+'
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '4.1.+', changing: true
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.5.31"
     }
 }
@@ -15,7 +15,7 @@ apply plugin: 'net.minecraftforge.gradle'
 //Only edit below this line, the above code adds and enables the necessary things for Forge to be setup.
 
 
-version = "1.0.8a"
+version = "1.0.8b"
 group = "moe.gensoukyo.npcspawner" // http://maven.apache.org/guides/mini/guide-naming-conventions.html
 archivesBaseName = "NpcSpawner"
 
@@ -53,13 +53,14 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
     flatDir { dirs 'libs' }
+    mavenCentral()
 }
 
 dependencies {
     minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2855'
-    testCompile 'junit:junit:4.12'
-    implementation 'org.jetbrains:annotations:15.0'
-    compileOnly fg.deobf('noppes.npcs:CustomNPCs_1.12.2:(05Jul20)')
+    testCompile 'junit:junit:4.13.2'
+    implementation 'org.jetbrains:annotations:22.0.0'
+    compile fg.deobf('noppes.npcs:CustomNPCs_1.12.2:(05Jul20)')
 }
 
 //jar.finalizedBy('reobfJar')

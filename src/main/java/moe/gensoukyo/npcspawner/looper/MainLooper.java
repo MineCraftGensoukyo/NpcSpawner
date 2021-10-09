@@ -1,6 +1,6 @@
-package moe.gensoukyo.npcspawner;
+package moe.gensoukyo.npcspawner.looper;
 
-import net.minecraftforge.fml.common.Mod;
+import moe.gensoukyo.npcspawner.Looper;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 
@@ -25,12 +25,9 @@ public class MainLooper implements Looper {
         this.phase = phase;
     }
 
-    public void stateStart() {
+    @Override
+    public void prepare() {
         running = true;
-    }
-
-    public void stateStop() {
-        exit();
     }
 
     @SubscribeEvent
