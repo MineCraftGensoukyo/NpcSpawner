@@ -11,14 +11,18 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.server.permission.PermissionAPI;
-import net.minecraftforge.server.permission.context.PlayerContext;
+import noppes.npcs.CustomNpcs;
 import noppes.npcs.api.NpcAPI;
+import noppes.npcs.api.entity.ICustomNpc;
+import noppes.npcs.api.entity.IEntity;
 import noppes.npcs.entity.EntityCustomNpc;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 /**
  * @author SQwatermark
@@ -27,84 +31,82 @@ import java.util.Random;
 public class NpcSpawner {
 
     static NpcSpawnerConfig config;
-    private static Random random = new Random();
+    private static final Random random = new Random();
+
+    public static HashSet<String> blkList = new HashSet<>();
+    public static boolean enableBlkList = false;
+
+    private static int remainingTick = -1;
 
     @SubscribeEvent
     public static void tick(TickEvent.WorldTickEvent event) {
-        if (random.nextInt(config.interval) == 0) {
+        if (event.world.isRemote
+                || event.phase == TickEvent.Phase.END
+                || CustomNpcs.FreezeNPCs
+                || ModMain.pauseSpawn) return;
+        remainingTick --;
+        if (remainingTick < 0) {
             tryToSpawnMob((WorldServer) event.world);
+            remainingTick = config.intervalMin + random.nextInt(config.intervalLength);
         }
     }
 
     public static void tryToSpawnMob(WorldServer worldServer) {
+        String worldName = worldServer.getWorldInfo().getWorldName();
+        if (enableBlkList && blkList.contains(worldName)) return;
+        List<NpcRegion.MobSpawnRegion> regions = config.mobSpawnRegions.get(worldName);
+        if (regions == null || regions.isEmpty()) return;
 
         //随便找几个倒霉鬼
-        List<EntityPlayer> list = worldServer.playerEntities;
+        List<EntityPlayer> list = worldServer.playerEntities.stream()
+                .filter(p->!PermissionAPI.hasPermission(p, "npcspawner.noMobSpawn"))
+                .filter(p->((EntityPlayerMP)p).interactionManager.survivalOrAdventure() || ModMain.debugSpawn)
+                .collect(Collectors.toList());
         if (list.size() == 0) {
             return;
         }
-        label:
-        for (int i = 0; i < list.size() / 4 + 1; i++) {
-            EntityPlayer player = list.get(random.nextInt(list.size()));
-            if (PermissionAPI.hasPermission(player.getGameProfile(), "npcspawner.noMobSpawn", new PlayerContext(player))) {
-                continue;
-            }
+        for (int i = random.nextInt(4); i < list.size(); i += 4) {
+            EntityPlayer player = list.get(i);
             //在这个倒霉鬼周围随便找个地方
             int r = config.minSpawnDistance + random.nextInt(config.maxSpawnDistance - config.minSpawnDistance);
-            double angle = Math.toRadians(random.nextInt(360));
-            double x = player.posX + r * Math.cos(angle);
-            double z = player.posZ + r * Math.sin(angle);
+            double[] cos_sin = MathUtils.unsafe_cos_sin(random.nextInt(360));
+            double x = player.posX + r * cos_sin[0];
+            double z = player.posZ + r * cos_sin[1];
+            double y;
             //自下而上找个高度
-            int y = 1;
-            for (int j = 0; j < 255; j++) {
-                if (worldServer.getBlockState(new BlockPos(x, j, z)).getBlock() == Blocks.AIR) {
-                    y = j;
-                    break;
-                }
+            double minY = Math.max(player.posY - 10, 0);
+            double maxY = Math.min(player.posY + 10, 255);
+            boolean findY = false;
+            for (y = minY; y < maxY + 1 && !findY; y++) {
+                findY = worldServer.getBlockState(new BlockPos(x, y, z)).getBlock() == Blocks.AIR;
             }
-            if (y > player.posY + 10) {
-                continue;
-            }
-            Vec3d place = new Vec3d(x, y, z);
-
-            //选中的地点在不在某个刷怪区里
-            for (NpcRegion.MobSpawnRegion mobSpawnRegion : config.mobSpawnRegions) {
-                //判断世界
-                if (!worldServer.getWorldInfo().getWorldName().toLowerCase().equals(mobSpawnRegion.world.toLowerCase())) {
-                    continue;
-                }
-                //判断位置
-                Vec2d vec2d = new Vec2d(place.x, place.z);
-                //如果选中的地点周围怪太多，则不能生成
-                if (worldServer.getEntitiesWithinAABB(EntityCustomNpc.class,
-                        new AxisAlignedBB(x - 50, y - 50, z - 50, x + 50, y + 50, z + 50)).size() > mobSpawnRegion.density) {
-                    continue;
-                }
-                //要在刷怪区内
-                if (mobSpawnRegion.region.isVecInRegion(vec2d) && mobSpawnRegion.region.isVecInRegion(new Vec2d(player.posX, player.posZ))) {
-                    //如果在黑名单内，则不刷怪
-                    for (NpcRegion.BlackListRegion blackListRegion : mobSpawnRegion.blackList) {
-                        if (blackListRegion.region.isVecInRegion(vec2d)) {
-                            continue label;
+            if (!findY) continue;
+            if (anyPlayerInDistance(list, i, x, y, z, config.minSpawnDistance, config.minSpawnDisPow)) continue;
+            final Vec3d place = new Vec3d(x, y, z);
+            final Vec3d pl_loc = player.getPositionVector();
+            final AxisAlignedBB aabb = new AxisAlignedBB(x - 50, y - 50, z - 50, x + 50, y + 50, z + 50);
+            final int densityNow = worldServer.getEntitiesWithinAABB(EntityCustomNpc.class, aabb).size();
+            regions.stream()
+                    .filter(region -> densityNow < region.density
+                            && (region.region.isVecInRegion(pl_loc) && region.region.isVecInRegion(place))
+                            && region.blackList.stream().noneMatch(blkRegion -> blkRegion.region.isVecInRegion(pl_loc) || blkRegion.region.isVecInRegion(place)))
+                    .findAny().ifPresent(mobSpawnRegion -> {
+                        boolean inWater = worldServer.getBlockState(new BlockPos(place.x, place.y-1, place.z)).getBlock() == Blocks.WATER;
+                        int timeOfDay = (int) (worldServer.getWorldTime() % 24000);
+                        NpcMob mob = chooseMobToSpawn(mobSpawnRegion, inWater, timeOfDay);
+                        if (mob != null) {
+                            try {
+                                IEntity<?> entity = NpcAPI.Instance().getClones().spawn(place.x, place.y, place.z,
+                                        mob.tab, mob.name, NpcAPI.Instance().getIWorld(worldServer));
+                                if (entity instanceof ICustomNpc<?>) {
+                                    ICustomNpc<?> icn = (ICustomNpc<?>) entity;
+                                    if (icn.getStats().getRespawnType() < 3) icn.getStats().setRespawnType(4);
+                                }
+                            } catch (Exception e) {
+                                ModMain.logger.info("NpcSpawner：NPC[" + mob.name + "]生成失败，可能是配置文件中提供的信息有误");
+                            }
                         }
-                        if (blackListRegion.region.isVecInRegion(new Vec2d(player.posX, player.posZ))) {
-                            continue label;
-                        }
-                    }
-                    //如果在刷怪区且不在黑名单内，随便挑一个怪物生成
-                    boolean inWater = worldServer.getBlockState(new BlockPos(place.x, place.y - 1, place.z)).getBlock() == Blocks.WATER;
-                    int timeOfDay = (int)(worldServer.getWorldTime() % 24000);
-                    NpcMob mob = chooseMobToSpawn(mobSpawnRegion, inWater, timeOfDay);
-                    if (mob != null) {
-                        try {
-                            NpcAPI.Instance().getClones().spawn(place.x, place.y, place.z,
-                                    mob.tab, mob.name, NpcAPI.Instance().getIWorld(((EntityPlayerMP)player).getServerWorld()));
-                        } catch (Exception e) {
-                            ModMain.logger.info("NpcSpawner：NPC[" + mob.name + "]生成失败，可能是配置文件中提供的信息有误");
-                        }
-                    }
-                }
-            }
+                    });
         }
     }
 
@@ -115,7 +117,6 @@ public class NpcSpawner {
      */
     @Nullable
     public static NpcMob chooseMobToSpawn(NpcRegion.MobSpawnRegion mobSpawnRegion, boolean inWater, int time) {
-        ArrayList<Integer> weights = new ArrayList<>();
         ArrayList<NpcMob> properMobs = new ArrayList<>();
         for (NpcMob mob : mobSpawnRegion.mobs) {
             if (mob.waterMob == inWater) {
@@ -131,36 +132,46 @@ public class NpcSpawner {
             }
         }
         if (properMobs.size() > 0) {
+            int sum = 0, i = 0, size = properMobs.size();
+            int[] weights = new int[size + 1];
+            weights[i++] = 0;
             for (NpcMob properMob : properMobs) {
-                weights.add((int)(properMob.weight * 100));
+                int w = properMob.weight;
+                sum += w;
+                weights[i++] = sum;
             }
-            return properMobs.get(random(weights));
+            int rnd = random.nextInt(sum);
+            int bi = 0, ei = size - 1;
+            if (weights[bi + 1] > rnd) i = bi;
+            else if (weights[ei] <= rnd) i = ei;
+            else while (ei - bi > 1) {
+                i = bi + (ei - bi) / 2;
+                int w = weights[i], w1 = weights[i + 1];
+                if (rnd < w) ei = i;
+                else if (rnd >= w1) bi = i;
+                else break;
+            }
+            return properMobs.get(i);
         } else {
             return null;
         }
     }
 
-    /**
-     * 权重随机数
-     * @param weight
-     * @return 索引值
-     */
-    public static int random(List<Integer> weight) {
-        List<Integer> weightTmp = new ArrayList<>(weight.size() + 1);
-        weightTmp.add(0);
-        Integer sum = 0;
-        for(Integer d : weight){
-            sum += d;
-            weightTmp.add(sum);
+    public static boolean anyPlayerInDistance(List<EntityPlayer> src, int playerIn, double x, double y, double z, double min, double d2) {
+        for (int i = 0; i < src.size(); i++) {
+            if (i == playerIn) continue;
+            EntityPlayer p = src.get(i);
+            double dx = abs(p.posX - x);
+            double dy = abs(p.posY - y);
+            double dz = abs(p.posZ - z);
+            if (dx > min || dy > min || dz > min) continue;
+            double ds = dx * dx + dy * dy + dz * dz;
+            if (ds < d2) return true;
         }
-        int rand = random.nextInt(sum);
-        int index = 0;
-        for(int i = weightTmp.size()-1; i >0; i--){
-            if( rand >= weightTmp.get(i)){
-                index = i;
-                break;
-            }
-        }
-        return index;
+        return false;
+    }
+
+    public static double abs(double a) {
+        return a < 0 ? -a : a;
     }
 }

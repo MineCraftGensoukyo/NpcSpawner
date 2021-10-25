@@ -3,53 +3,90 @@ package moe.gensoukyo.npcspawner;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import moe.gensoukyo.npcspawner.looper.MainLooper;
+import moe.gensoukyo.npcspawner.looper.ThreadLooper;
 import org.apache.commons.io.FileUtils;
 
 import javax.annotation.Nullable;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
-import java.util.ArrayList;
+import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * @author SQwatermark
+ * @author MrMks
  */
 public class NpcSpawnerConfig {
 
+    private static final ReentrantLock lock = new ReentrantLock();
+
     private static NpcSpawnerConfig instance;
+    private static NpcSpawnerConfig backInstance;
+
     public static NpcSpawnerConfig instance() {
-        if(instance == null) {
-            instance = new NpcSpawnerConfig();
+        if (lock.tryLock()) {
+            try {
+                if (instance == null) {
+                    instance = backInstance != null ? backInstance : new NpcSpawnerConfig();
+                } else {
+                    instance = backInstance != null ? backInstance : instance;
+                }
+                backInstance = null;
+            } finally {
+                lock.unlock();
+            }
         }
         return instance;
     }
 
+    private static void reload() {
+        NpcSpawnerConfig cfg = new NpcSpawnerConfig();
+        lock.lock();
+        try {
+            backInstance = cfg;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public static void reload(Runnable callback) {
+        ThreadLooper.getLooper().add(()->{
+            reload();
+            MainLooper.START.add(callback);
+        });
+    }
+
     //最小刷怪距离
     public int minSpawnDistance;
+    public int minSpawnDisPow;
     //最大刷怪距离
     public int maxSpawnDistance;
     //刷怪触发间隔,以tick计算
-    public int interval;
+    private int interval;
+    public int intervalMin;
+    public int intervalLength;
     //刷怪区的集合
-    ArrayList<NpcRegion.MobSpawnRegion> mobSpawnRegions;
+    Map<String, List<NpcRegion.MobSpawnRegion>> mobSpawnRegions;
     //安全区的集合
-    ArrayList<NpcRegion.BlackListRegion> blackListRegions;
+    Map<String, List<NpcRegion.BlackListRegion>> blackListRegions;
 
     //配置文件
     public File spawnerConfig;
 
     private NpcSpawnerConfig() {
         minSpawnDistance = 12;
+        minSpawnDisPow = 144;
         maxSpawnDistance = 36;
         interval = 300;
-        mobSpawnRegions = new ArrayList<>();
-        blackListRegions = new ArrayList<>();
-        this.refresh();
+        mobSpawnRegions = new HashMap<>();
+        blackListRegions = new HashMap<>();
+        this.load();
     }
 
-    public void refresh() {
+    private void load() {
         if (ModMain.modConfigDi.exists()) {
-            spawnerConfig = Paths.get(ModMain.modConfigDi.getAbsolutePath(), "npcspawner.json").toFile();
+            spawnerConfig = new File(ModMain.modConfigDi, "npcspawner.json");
 
             if(!spawnerConfig.exists()) {
                 ModMain.logger.info("未找到NPC生成配置");
@@ -68,7 +105,8 @@ public class NpcSpawnerConfig {
                         JsonObject mobSpawnRegionJson = array.get(i).getAsJsonObject();
                         NpcRegion.MobSpawnRegion mobSpawnRegion = parseMobSpawnRegion(mobSpawnRegionJson);
                         if (mobSpawnRegion != null) {
-                            mobSpawnRegions.add(mobSpawnRegion);
+                            List<NpcRegion.MobSpawnRegion> list = mobSpawnRegions.computeIfAbsent(mobSpawnRegion.world, k -> new ArrayList<>());
+                            list.add(mobSpawnRegion);
                         }
                     }
                     try {
@@ -77,7 +115,8 @@ public class NpcSpawnerConfig {
                             JsonObject blackListRegionJson = array2.get(i).getAsJsonObject();
                             NpcRegion.BlackListRegion blackListRegion = parseBlackListRegion(blackListRegionJson);
                             if (blackListRegion != null) {
-                                blackListRegions.add(blackListRegion);
+                                List<NpcRegion.BlackListRegion> list = blackListRegions.computeIfAbsent(blackListRegion.world, k -> new ArrayList<>());
+                                list.add(blackListRegion);
                             }
                         }
                     } catch (Exception e) {
@@ -97,16 +136,21 @@ public class NpcSpawnerConfig {
                 ModMain.logger.info("已生成mcgproject目录 ");
             }
         }
-        for (NpcRegion.MobSpawnRegion mobSpawnRegion : this.mobSpawnRegions) {
-            mobSpawnRegion.blackList.clear();
-            for (NpcRegion.BlackListRegion blackListRegion : this.blackListRegions) {
-                if (mobSpawnRegion.world.toLowerCase().equals(blackListRegion.world.toLowerCase())) {
-                    if (mobSpawnRegion.region.isCoincideWith(blackListRegion.region)) {
-                        mobSpawnRegion.blackList.add(blackListRegion);
+        for (Map.Entry<String, List<NpcRegion.MobSpawnRegion>> e : this.mobSpawnRegions.entrySet()) {
+            List<NpcRegion.MobSpawnRegion> spList = e.getValue();
+            List<NpcRegion.BlackListRegion> bkList = this.blackListRegions.get(e.getKey());
+            if (bkList != null && !bkList.isEmpty()) {
+                for (NpcRegion.MobSpawnRegion mobRegion : spList) {
+                    for (NpcRegion.BlackListRegion blackRegion : bkList) {
+                        if (mobRegion.region.isCoincideWith(blackRegion.region)) mobRegion.blackList.add(blackRegion);
                     }
                 }
             }
         }
+        minSpawnDisPow = minSpawnDistance * minSpawnDistance;
+        intervalLength = interval / 4;
+        intervalMin = interval - intervalLength;
+        intervalLength += intervalLength;
     }
 
     public NpcRegion.MobSpawnRegion parseMobSpawnRegion(JsonObject mobSpawnRegionJson) {
@@ -117,7 +161,7 @@ public class NpcSpawnerConfig {
             JsonArray pos2 = mobSpawnRegionJson.get("pos2").getAsJsonArray();
             int density = mobSpawnRegionJson.get("density").getAsInt();
             JsonArray mobs = mobSpawnRegionJson.get("mobs").getAsJsonArray();
-            return new NpcRegion.MobSpawnRegion(name, new Region2d(pos1.get(0).getAsDouble(),
+            return new NpcRegion.MobSpawnRegion(name, new Region3d(pos1.get(0).getAsDouble(),
                     pos1.get(1).getAsDouble(), pos2.get(0).getAsDouble(), pos2.get(1).getAsDouble()), density, parseNpcMobs(mobs), world);
         } catch (Exception e) {
             ModMain.logger.error("MCGProject：刷怪配置解析错误！刷怪区信息不符合规范！已跳过该刷怪区！");
@@ -131,7 +175,7 @@ public class NpcSpawnerConfig {
         for (int i = 0; i < mobsJson.size(); i++) {
             JsonObject mobJson = mobsJson.get(i).getAsJsonObject();
             NpcMob mob = parseNpcMob(mobJson);
-            if (mob != null) {
+            if (mob != null && mob.weight > 0) {
                 npcMobs.add(mob);
             }
         }
@@ -144,7 +188,7 @@ public class NpcSpawnerConfig {
             int tab = mobJson.get("tab").getAsInt();
             String mobName = mobJson.get("name").getAsString();
             double weight = mobJson.get("weight").getAsDouble();
-            NpcMob mob = new NpcMob(tab, mobName, weight);
+            NpcMob mob = new NpcMob(tab, mobName, (int) weight * 100);
             if (mobJson.has("waterMob")) {
                 mob.setWaterMob(mobJson.get("waterMob").getAsBoolean());
             }
@@ -165,7 +209,7 @@ public class NpcSpawnerConfig {
             JsonArray pos1 = blackListRegionJson.get("pos1").getAsJsonArray();
             JsonArray pos2 = blackListRegionJson.get("pos2").getAsJsonArray();
             String world = blackListRegionJson.get("world").getAsString();
-            return new NpcRegion.BlackListRegion(name, new Region2d(pos1.get(0).getAsDouble(),
+            return new NpcRegion.BlackListRegion(name, new Region3d(pos1.get(0).getAsDouble(),
                     pos1.get(1).getAsDouble(), pos2.get(0).getAsDouble(), pos2.get(1).getAsDouble()), true, world);
         } catch (Exception e) {
             ModMain.logger.error("MCGProject：刷怪配置解析错误！安全区信息不符合规范！已跳过该安全区！");
